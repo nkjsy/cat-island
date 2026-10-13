@@ -13,3 +13,6 @@ node_modules/
 
 # Claude Code local settings
 .claude/
+
+# CrazyGames build output (tools/crazygames-build.js)
+crazygames-release/
