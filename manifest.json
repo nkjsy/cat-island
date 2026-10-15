@@ -1,0 +1,16 @@
+{
+  "name": "猫猫小岛",
+  "short_name": "猫猫小岛",
+  "description": "收留小猫、看它们交朋友谈恋爱生小猫的 3D 小岛生活游戏",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#9EE3F5",
+  "theme_color": "#FF7A8A",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
