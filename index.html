@@ -651,8 +651,8 @@ function playClip(name, rate, vol, when=0, opts){
   const c = actx, b = sndBuf[name]; if(!c || !b) return null;
   const src = c.createBufferSource(), g = c.createGain(); src.buffer = b; src.playbackRate.value = rate;
   const t = c.currentTime + .01 + when; g.gain.value = vol;
-  if(opts && opts.loop){ src.loop = true; src.loopStart = .06; src.loopEnd = b.duration - .06; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .25); g.gain.setValueAtTime(vol, t + opts.secs - .4); g.gain.linearRampToValueAtTime(0, t + opts.secs); src.stop(t + opts.secs + .05); }
-  src.connect(g); g.connect(audioOut || c.destination); src.start(t); return src;
+  if(opts && opts.loop){ src.loop = true; src.loopStart = .06; src.loopEnd = b.duration - .06; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .25); g.gain.setValueAtTime(vol, t + opts.secs - .4); g.gain.linearRampToValueAtTime(0, t + opts.secs); }
+  src.connect(g); g.connect(audioOut || c.destination); src.start(t); if(opts && opts.loop) src.stop(t + opts.secs + .05); return src;
 }
 // one real meow per sentence: the clip follows the mood, the playback speed follows the cat's own pitch
 function catSay(voice, text, mood, when){
@@ -6640,10 +6640,22 @@ function petEdClick(b, e){
 const clock = new T.Clock(); let acc = 0, saveT = 0, barT = 0;
 let simT = 0, petT = 0;
 let gameSpeed = 1, paused = false;
+// adaptive resolution: a slow device draws fewer pixels instead of stuttering
+const PR_MAX = Math.min(window.devicePixelRatio||1, 2); let prNow = PR_MAX, prT = 0, prSum = 0, prN = 0;
+function adaptRes(real){
+  if(document.hidden || real > .5) return; prSum += real; prN++; prT += real; if(prT < 2) return;
+  const avg = prSum/prN; prT = prSum = prN = 0;
+  let to = prNow; if(avg > 1/40 && prNow > .75) to = Math.max(.75, prNow - .25); else if(avg < 1/55 && prNow < PR_MAX) to = Math.min(PR_MAX, prNow + .25);
+  if(to !== prNow){ prNow = to; renderer.setPixelRatio(prNow); onResize(); }
+}
 function loop(){
   requestAnimationFrame(loop);
-  loopStep(Math.min(clock.getDelta(), .05));
+  const real = clock.getDelta(); adaptRes(real);
+  loopStep(Math.min(real, .05));
 }
+// draw every cat's portrait a little at a time while nothing is happening, so the first tap on a cat doesn't stall
+function warmPortraits(){ const r = residents.find(x=>!portraitCache[JSON.stringify([x.d.look, x.d.outfit, x.d.acc])]); if(r) portrait(r.d); setTimeout(()=>(window.requestIdleCallback || setTimeout)(warmPortraits), r ? 600 : 8000); }
+setTimeout(warmPortraits, 4000);
 function loopStep(raw){
   const dt = paused ? 0 : raw*gameSpeed;
   simT += dt; frame(dt, simT);
