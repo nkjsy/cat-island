@@ -1,7 +1,7 @@
 // 猫猫小岛 offline support.
 // The game page is fetched from the network first (so new versions arrive right away) and falls back
 // to the cached copy when offline. Libraries, fonts and icons are served from the cache first.
-const CACHE = 'maomao-v1';
+const CACHE = 'maomao-v2';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
   './cat_model.js',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
