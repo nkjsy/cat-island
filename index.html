@@ -4090,7 +4090,7 @@ function addFriendWithPlayer(r, n){ const me = playerRes(); if(me && me!==r) add
 function openMe(){
   const me = playerRes();
   if(me){ closeModal(); select(me); return; }
-  closeModal(); makingPlayer = true; openEditor(); toast('🙋 捏一个你自己吧！你是岛上唯一的人类，猫咪们会叫你铲屎官');
+  closeModal(); makingPlayer = true; openEditor();
 }
 function playerMorning(extra){
   const me = playerRes(); if(!me) return;
@@ -5982,7 +5982,7 @@ function openModal(html, onClick){
   bg.addEventListener('input', e=>onClick && onClick(null, e));
 }
 let uiCloseT = 0;
-function closeModal(){ uiCloseT = performance.now(); makingPlayer = false; stopGame(); $('#modalRoot').innerHTML = ''; editorOpen = false; editing = null; }
+function closeModal(){ uiCloseT = performance.now(); if(makingPlayer && S && !S.playerId) setTimeout(()=>toast('想捏铲屎官的时候，去 🏢猫公寓 点「🙋 捏一个你自己」'), 400); makingPlayer = false; stopGame(); $('#modalRoot').innerHTML = ''; editorOpen = false; editing = null; }
 
 let shopTab = 'food';
 
@@ -6103,7 +6103,7 @@ function openEditor(r){
 }
 function renderEditor(){
   const last = draft.step === edSteps().length-1;
-  openModal(`<div class="mii-wrap"><div class="modal-head"><h2>${editing ? '换个新造型' : draft.isCat ? '来了一只新猫咪' : '捏一个你自己'}</h2><button class="toy close" data-close="1" style="margin-left:auto" aria-label="关闭">×</button></div>
+  openModal(`<div class="mii-wrap"><div class="modal-head"><h2>${editing ? '换个新造型' : draft.isCat ? '来了一只新猫咪' : '🙋 捏一个你自己，铲屎官'}</h2><button class="toy close" data-close="1" style="margin-left:auto" aria-label="关闭">×</button></div>
     <div class="mii-steps">${edSteps().map(([k,n],i)=>`<button class="mii-step ${i===draft.step?'on':''} ${i<draft.step?'done':''}" data-step="${i}"><b>${i+1}</b>${n}</button>`).join('<span class="mii-dash"></span>')}</div>
     <div class="mii">
       <div class="pv-wrap"><div id="pvSlot"></div>${draft.step===0 ? '<button class="toy pill-btn" data-rand="1">🎲 随机一下</button>' : `<div class="pv-name">${esc(draft.name||(draft.isCat ? '小猫' : '新朋友'))}</div>`}</div>
@@ -6868,7 +6868,7 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkUp
 if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, catPartAt, moonStart, moonEnd, gatherNow, moonSpot, catSpeak, heard, get mode(){ return mode; }, get stroke(){ return stroke; }, get renderer(){ return renderer; }, get camera(){ return camera; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
 // a new island starts with you: make the owner first, then meet the cats
 setTimeout(()=>{ if(S && !S.playerId && !S.meAsked && !$('#modalRoot').children.length){ S.meAsked = true; openMe(); } else toast('点一点小猫，看看它们想要什么吧！'); }, 1500);
-setTimeout(()=>toast('点猫屋可以进窝里布置哦'), 3800);
+setTimeout(()=>{ if(!$('#modalRoot').children.length) toast('点猫屋可以进窝里布置哦'); }, 3800);
 setTimeout(()=>toast('猫咪们会交朋友、哈气吵架、谈恋爱……多留意它们的心愿 💘'), 7000);
 setTimeout(()=>toast('点点岛上的猫咖、舞台、摩天轮和渔港，看看有什么好玩的'), 10500);
 })();
