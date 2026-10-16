@@ -252,7 +252,7 @@ textarea.text-in{width:100%;box-sizing:border-box;min-height:100px;resize:vertic
 .big-go{width:100%;padding:12px;font-size:22px;background:var(--coral);color:#fff;margin-top:6px}
 
 @media (max-width:440px){.hud-right{gap:6px}.icon-btn{width:40px;height:40px;font-size:18px}.coins{font-size:18px;padding:5px 10px}.brand{padding:5px 10px 6px}.brand h1{font-size:21px}.brand .clock{font-size:12px}}
-@media (max-width:440px){#hud{padding:10px 10px;gap:6px}.hud-right{gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:62vw}.icon-btn{width:36px;height:36px;font-size:16px}.coins{font-size:16px;padding:4px 8px}.brand h1{font-size:18px;white-space:nowrap}.brand{min-width:0}}
+@media (max-width:440px){#toasts{top:calc(132px + env(safe-area-inset-top,0px))}#hud{padding:10px 10px;gap:6px}.hud-right{gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:62vw}.icon-btn{width:36px;height:36px;font-size:16px}.coins{font-size:16px;padding:4px 8px}.brand h1{font-size:18px;white-space:nowrap}.brand{min-width:0}}
 /* voice / rps / photos */
 .voice-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:14px}
 .voice-row label{display:flex;align-items:center;gap:6px}
@@ -436,8 +436,13 @@ function kidAge(d){ return Math.max(0, (S.day - (d.bornDay ?? S.day)) / 10); }
 function kidStage(d){ const a = kidAge(d); return a < 3 ? '小奶猫' : a < 6 ? '小猫崽' : a < 12 ? '小猫咪' : '少年猫'; }
 function catKitten(d){ return !!(d && d.kid && kidAge(d) < 6); }
 // kittens use the round kitten model until 6, then the adult model grows into full size
-function kidScale(d){ if(!d.kid) return 1.25; const a = kidAge(d); return a < 6 ? 1.25*(.9 + .25*a/6) : 1.25*(.8 + .2*Math.min(1, (a-6)/12)); }
-function kidTag(d){ return `${kidStage(d)} · ${Math.floor(kidAge(d))}岁`; }
+// you, the one human, stand a head taller than the cats
+function kidScale(d){ if(!d.kid) return d.look && !d.look.cat ? 1.8 : 1.25; const a = kidAge(d); return a < 6 ? 1.25*(.9 + .25*a/6) : 1.25*(.8 + .2*Math.min(1, (a-6)/12)); }
+// the island's clock counts in the old human years; cats are shown in cat years
+// (18 → 1 year old, 24 → 2, then 4 old years per cat year: 50 → about 8, 65 → about 12)
+function catYears(h){ return h <= 15 ? h/15 : h <= 24 ? 1 + (h-15)/9 : 2 + (h-24)/4; }
+function ageText(h, human){ if(human) return Math.floor(h) + '岁'; const y = catYears(h); return y < 1 ? Math.max(1, Math.round(y*12)) + '个月' : Math.floor(y) + '岁'; }
+function kidTag(d){ return `${kidStage(d)} · ${ageText(kidAge(d))}`; }
 function kidsOf(a, b){ return residents.filter(r=>r.d.parents && r.d.parents.includes(a.d.id) && r.d.parents.includes(b.d.id)).length; } // one island year = 10 days
 const GENRES = {
   pop:{n:'流行',bpm:132,wave:'triangle',scale:[0,2,4,7,9,12,14,16]},
@@ -2506,6 +2511,7 @@ function dressChar(r){
   const label = sprite(labelTex((r.d.isPlayer ? '⭐' : '') + r.d.name), 1.5, .42); label.position.y = p.labelY; p.root.add(label); r.label = label;
   const b = sprite(bubbleTex('💬','n'), 1.05, 1.05); b.position.y = p.bubbleY; b.visible = false; p.root.add(b); r.bubble = b; r.bubbleKey = '';
   p.root.scale.setScalar(kidScale(r.d)); p.hit.userData.pick = {type:'res', r};
+  if(!p.isCat){ const k = 1.25/kidScale(r.d); label.scale.multiplyScalar(k); b.scale.multiplyScalar(k); }
 }
 function rebuildChar(r){
   const old = r.p.root, p = buildChar(r.d.look, r.d.acc, r.d.outfit, r.d.voice, catKitten(r.d));
@@ -4549,7 +4555,7 @@ function openBook(){
    FAMILY TREE
    ===================================================================== */
 function openFamilyTree(){
-  const P = r=>`<div class="ft-person"><img src="${portrait(r.d)}" alt=""><span>${r.d.isPlayer?'⭐':''}${esc(r.d.name)}</span><small>${r.d.kid ? kidTag(r.d) : (r.d.age ? r.d.age + '岁' : '')}</small></div>`;
+  const P = r=>`<div class="ft-person"><img src="${portrait(r.d)}" alt=""><span>${r.d.isPlayer?'⭐':''}${esc(r.d.name)}</span><small>${r.d.kid ? kidTag(r.d) : (r.d.age ? ageText(r.d.age, !r.d.look.cat) : '')}</small></div>`;
   const kidsOf2 = (a,b)=>residents.filter(k=>k.d.parents && k.d.parents.includes(a.d.id) && (!b || k.d.parents.includes(b.d.id)));
   const seen = new Set();
   const unit = r=>{ // a person, their spouse/partner and their children, recursively
@@ -4598,7 +4604,7 @@ function schoolMorning(extra){
 }
 function openSchool(){
   const studs = residents.filter(r=>schoolAge(r.d)), teachers = residents.filter(r=>r.d.job==='teacher');
-  openModal(modalHead('🏫 猫咪学校') + `<p class="tip">6 岁以上的小猫工作日白天会来上学，学爬树、抓老鼠、洗脸，每天早上出成绩；同学之间会慢慢变成朋友，18 岁毕业。${teachers.length ? `猫老师：${teachers.map(t=>esc(t.d.name)).join('、')}` : '还没有猫老师，可以在猫咪资料里把工作改成「猫老师」。'}</p>
+  openModal(modalHead('🏫 猫咪学校') + `<p class="tip">5 个月以上的小猫工作日白天会来上学，学爬树、抓老鼠、洗脸，每天早上出成绩；同学之间会慢慢变成朋友，1 岁毕业。${teachers.length ? `猫老师：${teachers.map(t=>esc(t.d.name)).join('、')}` : '还没有猫老师，可以在猫咪资料里把工作改成「猫老师」。'}</p>
     ${studs.length ? `<div class="fr-list">${studs.map(r=>`<div class="fr"><img src="${portrait(r.d)}" style="width:46px;height:46px;border-radius:50%" alt=""><div><div class="who">${esc(r.d.name)}</div><div class="meta">${kidTag(r.d)} · 最近成绩 ${r.d.grade ?? '—'} 分 · 还有 ${Math.max(0, Math.ceil(ADULT_AGE - kidAge(r.d)))} 年毕业</div></div></div>`).join('')}</div>` : '<p class="empty">现在还没有上学的小猫。</p>'}`);
 }
 
@@ -4749,7 +4755,7 @@ function lettersMorning(extra){
     const d = r.d, y = (d.mem||[]).filter(x=>x.day >= S.day-1);
     if(y.length && Math.random() < .55){ const ml = memoryLine(r) || '谢谢你一直照顾我'; write(r, `${ml}。\n能住在这座小岛上，有铲屎官在真好。${d.catch}！`, Math.random() < .5 ? {coins:ri(10,30)} : {item:true}); return; }
     if(d.mood < 35 && Math.random() < .5){ write(r, `最近总觉得有点提不起劲，连毛线球都不想追……\n${d.full < 40 ? '肚子也一直饿着。' : ''}你有空的时候能来摸摸我吗？`); return; }
-    if(d.kid && kidAge(d) >= 3 && kidAge(d) < 11 && Math.random() < .2){ write(r, `我给你按了一张爪印画！🐾\n印的是我们的小岛，还有你哦。\n—— ${d.name}（${Math.floor(kidAge(d))}岁）`, {coins:5}); return; }
+    if(d.kid && kidAge(d) >= 3 && kidAge(d) < 11 && Math.random() < .2){ write(r, `我给你按了一张爪印画！🐾\n印的是我们的小岛，还有你哦。\n—— ${d.name}（${ageText(kidAge(d))}）`, {coins:5}); return; }
     if(S.party && S.party.day===S.day && S.party.host===d.id){ write(r, `今晚 6 点我窝里开派对！🎉\n大家都会来，铲屎官也一定要来看看哦。`); return; }
     if(Math.random() < .06){ write(r, pick([`今天天气${WEATHER[weather()].n}，心情也跟着${weather()==='sunny' ? '变好啦' : '安静下来'}。`, `我最近在想，要是能${LIFE_DREAMS[(d.dream||{}).id] ? LIFE_DREAMS[d.dream.id].n : '去流浪看世界'}就好了。`, `${FOODS[d.fav].n}真的太好吃了，你也尝尝吧！`, `只是想跟你喵一声早上好～`, `今天在窗台晒了一下午太阳，好舒服。`]) + `\n${d.catch}`); }
   });
@@ -5519,7 +5525,7 @@ function birthdayAge(r){
   const d = r.d; if(d.kid || d.isPlayer && !d.age) return;
   d.age = (d.age || 25) + 1;
   if(d.age >= 50){ grayHair(d); rebuildChar(r); }
-  if(d.age === RETIRE_AGE && d.job && d.job!=='none'){ const was = JOBS[d.job] ? JOBS[d.job].n : '差事'; d.job = 'none'; d.retired = true; logNews(`👴 ${d.name} ${RETIRE_AGE} 岁了，毛色有点灰了，不当${was}，退休去晒太阳啦`); }
+  if(d.age === RETIRE_AGE && d.job && d.job!=='none'){ const was = JOBS[d.job] ? JOBS[d.job].n : '差事'; d.job = 'none'; d.retired = true; logNews(`👴 ${d.name} ${ageText(RETIRE_AGE)}了，毛色有点灰了，不当${was}，退休去晒太阳啦`); }
 }
 
 /* ---------------- time of day ---------------- */
@@ -5563,7 +5569,7 @@ function morning(){
   const extra = [];
   residents.forEach(r=>{ const w = r.d.want; if(w && w.type==='makeup' && w.since!=null && S.day - w.since >= 5){ const o = byId(w.with); r.d.want = null; if(o && o.d.want && o.d.want.type==='makeup' && o.d.want.with===r.d.id){ o.d.want = null; extra.push(`🤝 ${r.d.name} 和 ${o.d.name} 过了好几天，终于又互相舔毛，和好了`); } } });
   residents.forEach(r=>{ if(r.d.kid){ const before = kidStage(Object.assign({}, r.d, {bornDay:r.d.bornDay+1})); if(r.p.isCat && r.p.kitten !== catKitten(r.d)) rebuildChar(r); r.p.root.scale.setScalar(kidScale(r.d)); const now = kidStage(r.d); if(now !== before && S.day - r.d.bornDay < KID_DAYS) extra.push(`🌱 ${r.d.name} ${Math.floor(kidAge(r.d))} 岁了，成了${now}`); } });
-  residents.forEach(r=>{ if(r.d.kid && S.day - r.d.bornDay >= KID_DAYS){ r.d.kid = false; r.d.age = ADULT_AGE; r.p.root.scale.setScalar(1.25); r.d.job = pick(jobsOpen().filter(k=>k!=='none')); giveDream(r.d); addCoins(50); extra.push(`🎓 ${r.d.name} 18 岁从猫咪学校毕业啦，成了大猫，当上了${JOBS[r.d.job].n}！`); } });
+  residents.forEach(r=>{ if(r.d.kid && S.day - r.d.bornDay >= KID_DAYS){ r.d.kid = false; r.d.age = ADULT_AGE; r.p.root.scale.setScalar(kidScale(r.d)); r.d.job = pick(jobsOpen().filter(k=>k!=='none')); giveDream(r.d); addCoins(50); extra.push(`🎓 ${r.d.name} 满 1 岁，从猫咪学校毕业啦，成了大猫，当上了${JOBS[r.d.job].n}！`); } });
   const seen = new Set();
   residents.slice().forEach(r=>{
     const pt = r.d.partner && byId(r.d.partner); if(!pt || seen.has(r)) return; seen.add(pt);
@@ -5627,9 +5633,11 @@ const pointers = new Map(); let dragMoved = false, pinchD = 0, downAt = null;
 let stroke = null;
 function catPartAt(r, x, y){
   ndc.set(x/innerWidth*2-1, -(y/innerHeight)*2+1); ray.setFromCamera(ndc, camera);
-  const h = ray.intersectObject(r.p.hit, false)[0]; if(!h) return null;
-  const lp = r.p.root.worldToLocal(h.point.clone()), k = lp.y / (r.p.top || 2);
-  return k > .62 ? 'head' : k > .38 ? 'back' : 'belly';
+  if(!ray.intersectObject(r.p.hit, false).length) return null;
+  const sy = v=>(1 - v.project(camera).y)/2*innerHeight, s = r.p.root.scale.y;
+  const feet = sy(r.p.root.position.clone()), top = sy(r.p.root.position.clone().setY((r.p.top || 2)*s));
+  const k = (feet - y) / Math.max(8, feet - top);
+  return k > .66 ? 'head' : k > .36 ? 'back' : 'belly';
 }
 function strokeStart(e){
   if(mode!=='island' || !selected || !selected.p.isCat || selected.state==='home' || inEvent(selected)) return false;
@@ -5647,7 +5655,7 @@ function strokeMove(e){
   const proud = d.traits ? d.traits.talk : 4;
   if(part==='belly' && (proud >= 5 ? Math.random() < .5 : Math.random() < .12)){
     strokeEnd(true); bondUp(r, -2); r.angryT = 1.6; d.mood = clamp(d.mood - 3, 0, 100); speakWith(d.voice, '哈——！', 'angry');
-    r.say = pick(['肚子不许摸！','哼，那里不行','喵嗷！手拿开']) + '，' + d.catch; toast(`😾 ${d.name} 被摸到肚子，挠了你一下！`); renderSheet(); return;
+    r.say = pick(['肚子不许摸','哼，那里不行','喵嗷，手拿开']) + '！' + d.catch; toast(`😾 ${d.name} 被摸到肚子，挠了你一下！`); renderSheet(); return;
   }
   st.good++; r.happyClip = 'pet'; beHappy(r, part==='head' ? '💕' : '💖', 1.2);
   if(st.n % 2 === 0) burst(scene, r.p.root.position.clone().setY((r.p.top || 2) * .8), pick(['💗','💕','✨']), 2, .5);
@@ -5723,6 +5731,7 @@ function select(r){
   if(inEvent(r)){ toast(`${r.d.name} 正在忙一件大事！`); return; }
   sfx.pop(); r.say = talk(r); task('talk', r.d.id); fortuneTap(r);
   if(selected && selected !== r) releaseSelected();
+  if(!selected && cam.dist > 16){ cam.prevDist = cam.dist; cam.distGoal = innerWidth < 600 ? 15 : 16; }
   selected = r; chooser = null;
   if(r.state==='walk'){ r.state='idle'; r.timer = 1; r.target = null; }
   cam.goal.copy(r.p.root.position);
@@ -5745,7 +5754,7 @@ function patCat(r, stroked){
   if(d.want && d.want.type==='pat') fulfil(r, 15);
   renderSheet(); return;
 }
-function closeSheet(){ uiCloseT = performance.now(); releaseSelected(); chooser = null; $('#sheet').hidden = true; if(mode==='island') $('#dock').hidden = false; }
+function closeSheet(){ uiCloseT = performance.now(); if(cam.prevDist){ cam.distGoal = cam.prevDist; cam.prevDist = null; } releaseSelected(); chooser = null; $('#sheet').hidden = true; if(mode==='island') $('#dock').hidden = false; }
 function hairDot(d){ return d.look.cat ? `style="background:#FFF6E6 url(${portrait(d)}) center/cover;--hair:transparent"` : `style="background:${d.look.skin};--hair:${d.look.hairColor}"`; }
 function renderSheet(){
   const r = selected; if(!r) return; const d = r.d, el = $('#sheet');
@@ -5785,7 +5794,7 @@ function renderSheet(){
   el.innerHTML = `
     <div class="sheet-head">
       <div class="face-dot" ${hairDot(d)}></div>
-      <div><h2>${esc(d.name)}</h2><div class="tags"><span class="tag">${gOf(r)==='f' ? '♀ 母猫' : '♂ 公猫'}</span><span class="tag">${persName(d)}</span>${jobOf(d) ? `<button class="tag tagbtn" data-act="job">${jobOf(d).e} ${jobOf(d).n}</button>` : ''}<span class="tag">${d.level} 级</span><span class="tag">🎂 ${bdayText(d)}</span>${!d.kid && d.age ? `<span class="tag">${d.age >= 60 ? '👴' : '🐈'} ${d.age}岁${d.retired ? ' · 退休晒太阳' : ''}</span>` : ''}${schoolAge(d) && d.grade ? `<span class="tag">📝 ${d.grade}分</span>` : ''}${d.nick?`<span class="tag">外号「${esc(d.nick)}」</span>`:''}<span class="tag">最爱 ${FOODS[d.fav].e}</span><span class="tag">不爱 ${FOODS[d.dislike].e}</span>${residents.length>1?`<button class="tag tagbtn" data-act="rel">💞 关系图</button>`:''}<button class="tag tagbtn" data-share="1">🔗 分享</button>${pt?`<span class="tag">${d.pType==='spouse'?'💍 夫妻':'💑 恋人'} ${esc(pt.d.name)}</span>`:''}${d.kid?`<span class="tag">🍼 ${kidTag(d)}</span>`:''}${pets.filter(pw=>pw.d.owner===d.id).map(pw=>`<span class="tag">${PET_KINDS[pw.d.kind].e} ${esc(pw.d.name)}</span>`).join('')}</div></div>
+      <div><h2>${esc(d.name)}</h2><div class="tags"><span class="tag">${gOf(r)==='f' ? '♀ 母猫' : '♂ 公猫'}</span><span class="tag">${persName(d)}</span>${jobOf(d) ? `<button class="tag tagbtn" data-act="job">${jobOf(d).e} ${jobOf(d).n}</button>` : ''}<span class="tag">${d.level} 级</span><span class="tag">🎂 ${bdayText(d)}</span>${!d.kid && d.age ? `<span class="tag">${d.age >= 60 ? '👴' : d.look.cat ? '🐈' : '🙋'} ${ageText(d.age, !d.look.cat)}${d.retired ? ' · 退休晒太阳' : ''}</span>` : ''}${schoolAge(d) && d.grade ? `<span class="tag">📝 ${d.grade}分</span>` : ''}${d.nick?`<span class="tag">外号「${esc(d.nick)}」</span>`:''}<span class="tag">最爱 ${FOODS[d.fav].e}</span><span class="tag">不爱 ${FOODS[d.dislike].e}</span>${residents.length>1?`<button class="tag tagbtn" data-act="rel">💞 关系图</button>`:''}<button class="tag tagbtn" data-share="1">🔗 分享</button>${pt?`<span class="tag">${d.pType==='spouse'?'💍 夫妻':'💑 恋人'} ${esc(pt.d.name)}</span>`:''}${d.kid?`<span class="tag">🍼 ${kidTag(d)}</span>`:''}${pets.filter(pw=>pw.d.owner===d.id).map(pw=>`<span class="tag">${PET_KINDS[pw.d.kind].e} ${esc(pw.d.name)}</span>`).join('')}</div></div>
       <button class="toy close" data-close="1" aria-label="关闭">×</button>
     </div>
     <div class="bars">
@@ -6202,7 +6211,7 @@ function editorClick(b, e){
       const name = (draft.name||'').trim() || '新朋友';
       const d = makeResData(name.slice(0,6), draft.look, draft.pers, draft.slot); d.traits = draft.traits; d.outfit = draft.outfit || 'tee'; if(d.outfit!=='tee' && S.inv.cloth[d.outfit]){ S.inv.cloth[d.outfit]--; } d.catch = (draft.catch||'').trim().slice(0,5) || pick(CATCHES); d.voice = draft.voice;
       d.bday = draft.bday || d.bday; d.nick = (draft.nick||'').trim().slice(0,5) || null;
-      if(makingPlayer){ d.isPlayer = true; S.playerId = d.id; d.job = null; d.voice.human = true; }
+      if(makingPlayer){ d.isPlayer = true; S.playerId = d.id; d.job = null; d.voice.human = true; setTimeout(()=>toast('欢迎来到猫猫小岛，铲屎官！点一点小猫，看看它们想要什么吧'), 2500); }
       closeModal(); const r = addResident(d, true);
       save(); sfx.happy(); toast(`欢迎 ${d.name} 搬进猫猫小岛！`, 'gold'); logNews(`🏠 ${d.name} 搬进了小岛`);
       cam.goal.copy(r.p.root.position); confetti(scene, r.p.root.position); if(!isNight()) beHappy(r,'👋',2);
@@ -6825,8 +6834,9 @@ function showUpdateBar(){
 }
 checkUpdate(); setInterval(checkUpdate, 3*60*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkUpdate(); });
-if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, get renderer(){ return renderer; }, get camera(){ return camera; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
-setTimeout(()=>toast('点一点小猫，看看它们想要什么吧！'), 600);
+if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, catPartAt, get stroke(){ return stroke; }, get renderer(){ return renderer; }, get camera(){ return camera; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
+// a new island starts with you: make the owner first, then meet the cats
+setTimeout(()=>{ if(S && !S.playerId && !S.meAsked && !$('#modalRoot').children.length){ S.meAsked = true; openMe(); } else toast('点一点小猫，看看它们想要什么吧！'); }, 1500);
 setTimeout(()=>toast('点猫屋可以进窝里布置哦'), 3800);
 setTimeout(()=>toast('猫咪们会交朋友、哈气吵架、谈恋爱……多留意它们的心愿 💘'), 7000);
 setTimeout(()=>toast('点点岛上的猫咖、舞台、摩天轮和渔港，看看有什么好玩的'), 10500);
