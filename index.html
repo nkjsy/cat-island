@@ -2661,7 +2661,7 @@ function endChat(r, natural){
   if(o && o.state==='chat' && o.target===r){
     o.target = null; o.state = 'idle'; o.timer = rand(1,2);
     const fv0 = r.d.friends[o.d.id]||0;
-    if(fv0 >= 15 && (r.d.partner!==o.d.id || Math.random() < .5) && !isFamily(r,o) && !hasSocialWant(r) && !hasSocialWant(o) && Math.random() < (compat(r,o)===1 ? .1 : .04) * fortuneK(r,o)){
+    if(fv0 >= 15 && !r.d.isPlayer && !o.d.isPlayer && (r.d.partner!==o.d.id || Math.random() < .5) && !isFamily(r,o) && !hasSocialWant(r) && !hasSocialWant(o) && Math.random() < (compat(r,o)===1 ? .1 : .04) * fortuneK(r,o)){
       quarrel(r, o); r.state = 'idle'; r.timer = rand(1,2.5); return;
     }
     addFriend(r, o, 4 + compat(r,o) + Math.floor(rand(0,3)));
@@ -2891,7 +2891,7 @@ function addCoins(n){ S.coins += n; updateCoins(); if(n>0){ sfx.coin(); } }
 function updateCoins(){ $('#coinNum').textContent = S.coins; }
 function fulfil(r, coins){
   if(r.d.want && !['food','acc','cloth'].includes(r.d.want.type)) remember(r, 'help', r.d.want.type);
-  r.d.want = null; addCoins(coins); addFriendWithPlayer(r, 2); task('help');
+  r.d.want = r.d.wantBack || null; r.d.wantBack = null; addCoins(coins); addFriendWithPlayer(r, 2); task('help');
   if(Math.random() < .3) gainTreasure(r);
   r.d.xp += 1;
   if(r.d.xp >= 3){ r.d.xp = 0; r.d.level += 1; r.d.lvPending = true; toast(`${r.d.name} 升到了 ${r.d.level} 级！点${ta(r.d)}挑一个奖励 ⭐`, 'gold'); logNews(`⭐ ${r.d.name} 升到了 ${r.d.level} 级`); confetti(mode==='room'?roomScene:scene, mode==='room'?roomChar.root.position:r.p.root.position); sfx.happy(); }
@@ -2984,7 +2984,7 @@ function resolveEvent(){
       a.d.partner = b.d.id; b.d.partner = a.d.id; a.d.pType = b.d.pType = 'lover'; a.d.pSince = b.d.pSince = S.day;
       remember(a, 'love'); remember(b, 'love'); addFriend(a, b, 10); joy('💖','💖'); burst(scene, mid, '💖', 12, 1.2); addCoins(50);
       toast(`${b.d.name} 答应了！${a.d.name} 和 ${b.d.name} 成为了恋人 💑`, 'pink');
-      logNews(`💑 ${a.d.name} 用「${CONFESS[style].n}」向 ${b.d.name} 表白成功，两只猫开始交往了！`);
+      logNews(`💑 ${a.d.name} 用「${CONFESS[style].n}」向 ${b.d.name} 表白成功，两只猫开始交往了！`); setTimeout(()=>autoPhoto(`💑 ${a.d.name} 和 ${b.d.name} 在一起了`), 900);
     } else {
       addFriend(a, b, -20); a.d.mood = clamp(a.d.mood-25,0,100);
       a.scriptBubble = '💔'; b.scriptBubble = '🙏'; sfx.boing();
@@ -3943,7 +3943,7 @@ function openMiniGame(r, g){
   return gameSpot(r);
 }
 function gameCatch(r){
-  gameModal('🐟 接小鱼', `<p class="tip">左右拖动（或用方向键）移动篮子，接住掉下来的小鱼！小心炸弹 💣。</p><canvas id="mgCv" width="320" height="380" style="width:100%;max-width:320px;display:block;margin:0 auto;border:3px solid var(--ink);border-radius:16px;background:linear-gradient(#BFEFFF,#E8FAFF);touch-action:none"></canvas><div class="rps-msg" id="mgInfo">得分 0 · 剩 25 秒</div>`);
+  gameModal('🐟 接小鱼', `<p class="tip">左右拖动（或用方向键）移动篮子，接住掉下来的小鱼，🐠 算两条！小心黄瓜 🥒，猫最怕它了。</p><canvas id="mgCv" width="320" height="380" style="width:100%;max-width:320px;display:block;margin:0 auto;border:3px solid var(--ink);border-radius:16px;background:linear-gradient(#BFEFFF,#E8FAFF);touch-action:none"></canvas><div class="rps-msg" id="mgInfo">得分 0 · 剩 25 秒</div>`);
   const cv = $('#mgCv'), g = cv.getContext('2d'), st = {x:160, items:[], score:0, t:25, spawn:0, last:performance.now()};
   const move = e=>{ const rc = cv.getBoundingClientRect(); st.x = clamp((e.clientX - rc.left)/rc.width*320, 30, 290); };
   cv.addEventListener('pointermove', move); cv.addEventListener('pointerdown', move);
@@ -3951,9 +3951,9 @@ function gameCatch(r){
   gameLoop = {raf:0};
   const step = now=>{
     const dt = Math.min(.05, (now - st.last)/1000); st.last = now; st.t -= dt; st.spawn -= dt;
-    if(st.spawn <= 0){ st.items.push({x:rand(20,300), y:-20, v:rand(110,170) + (25-st.t)*6, bomb:Math.random() < .15}); st.spawn = rand(.35,.7); }
+    if(st.spawn <= 0){ st.items.push({x:rand(20,300), y:-20, v:rand(110,170) + (25-st.t)*6, bomb:Math.random() < .15, big:Math.random() < .2}); st.spawn = rand(.35,.7); }
     g.clearRect(0,0,320,380); g.font = '30px "Segoe UI Emoji","Apple Color Emoji",sans-serif'; g.textAlign = 'center';
-    st.items.forEach(it=>{ it.y += it.v*dt; g.fillText(it.bomb ? '💣' : '🍎', it.x, it.y); if(!it.hit && it.y > 330 && it.y < 360 && Math.abs(it.x - st.x) < 42){ it.hit = true; if(it.bomb){ st.score = Math.max(0, st.score-3); tone(120,.2,'sine',.08); } else { st.score++; tone(880,.06,'triangle',.05); } } });
+    st.items.forEach(it=>{ it.y += it.v*dt; g.fillText(it.bomb ? '🥒' : it.big ? '🐠' : '🐟', it.x, it.y); if(!it.hit && it.y > 330 && it.y < 360 && Math.abs(it.x - st.x) < 42){ it.hit = true; if(it.bomb){ st.score = Math.max(0, st.score-3); tone(120,.2,'sine',.08); } else { st.score += it.big ? 2 : 1; tone(880,.06,'triangle',.05); } } });
     st.items = st.items.filter(it=>!it.hit && it.y < 400);
     g.font = '44px "Segoe UI Emoji","Apple Color Emoji",sans-serif'; g.fillText('🧺', st.x, 365);
     const info = $('#mgInfo'); if(!info){ stopGame(); window.removeEventListener('keydown', key); return; }
@@ -3964,7 +3964,7 @@ function gameCatch(r){
   gameLoop.raf = requestAnimationFrame(step);
 }
 function gameMemory(r){
-  const faces = shuffle(['🐶','🐱','🐰','🦊','🐼','🐸']).slice(0,6), cards = shuffle(faces.concat(faces)).map(e=>({e, open:false, done:false}));
+  const faces = shuffle(['🐟','🧶','🐭','🥛','📦','🐾','🦋','🍤']).slice(0,6), cards = shuffle(faces.concat(faces)).map(e=>({e, open:false, done:false}));
   let first = null, lock = false, moves = 0;
   const draw = ()=>{
     gameModal('🃏 翻牌配对', `<p class="tip">翻开两张一样的牌就能配对。步数越少奖励越多！　已用 ${moves} 步</p><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:340px;margin:0 auto">${cards.map((c,i)=>`<button class="toy" data-card="${i}" style="aspect-ratio:1;font-size:34px;padding:0;background:${c.open||c.done?'#fff':'var(--lilac)'}">${c.open||c.done ? c.e : '❔'}</button>`).join('')}</div>`);
@@ -3987,7 +3987,7 @@ function gameMole(r){
   gameLoop = {iv: setInterval(()=>{
     const info = $('#mgInfo'); if(!info){ stopGame(); return; }
     st.t -= .1; st.upT -= .1;
-    if(st.upT <= 0){ st.up = Math.random() < .85 ? ri(0,8) : -1; st.upT = Math.max(.45, .95 - (20-st.t)*.02); holes.forEach((h,i)=>h.textContent = i===st.up ? '🐹' : '🕳️'); }
+    if(st.upT <= 0){ st.up = Math.random() < .85 ? ri(0,8) : -1; st.upT = Math.max(.45, .95 - (20-st.t)*.02); holes.forEach((h,i)=>h.textContent = i===st.up ? '🐭' : '🕳️'); }
     info.textContent = `得分 ${st.score} · 剩 ${Math.max(0, Math.ceil(st.t))} 秒`;
     if(st.t <= 0) gameDone(r, st.score, Math.min(60, st.score*3), `🐭 抓到了 ${st.score} 只老鼠！`);
   }, 100)};
@@ -4053,6 +4053,12 @@ function convoFor(a, b){
   const A = a.d, B = b.d, fv = A.friends[B.id]||0, w = weather(), food = FOODS[A.fav] ? FOODS[A.fav].n : '小鱼干';
   const others = residents.filter(x=>x!==a && x!==b && !x.d.isPlayer), c = others.length ? pick(others).d.name : '大家';
   const loc = LOCS[pick(HANG_LOCS)] ? LOCS[pick(HANG_LOCS)].n : '猫咖';
+  if(A.isPlayer || B.isPlayer){
+    const C = A.isPlayer ? B : A, cf = FOODS[C.fav] ? FOODS[C.fav].n : '小鱼干';
+    const pp = [[`喵～（蹭蹭裤腿）`, `${C.name}乖～`], [`喵！${cf}呢？`, `等会儿就给你买`], [`铲屎官，摸摸我`, `好好好，摸摸头`], [`（翻出肚皮）`, `真的可以摸吗……`], [`你知道吗，${c}最近总钻纸箱`, `哈哈，我也看到了`]];
+    if(w==='rain') pp.push([`下雨了，抱我回家`, `好，躲到我怀里`]);
+    const l = pick(pp); return A.isPlayer ? [l[1], l[0]] : l;
+  }
   const pool = [
     [`喵~${B.name}！`, `喵～今天毛也很顺嘛`],
     [`你吃过${food}吗？`, pick(['吃过！香得我直呼噜','还没呢，下次一起去吧'])],
@@ -4090,6 +4096,7 @@ function convoTick(r, dt){
 function endConvo(r){ if(r.convo){ r.convo = null; } if(r.tb) setTalkBubble(r, null); if(r.convoWith && r.convoWith.tb) setTalkBubble(r.convoWith, null); r.convoWith = null; }
 // after a good chat, friends sometimes do something together
 function doActivity(a, b){
+  if(a.d.isPlayer || b.d.isPlayer) return playerActivity(a.d.isPlayer ? b : a, a.d.isPlayer ? a : b);
   const w = weather(), kind = w==='snow' ? pick(['snow','snow','walk','photo']) : pick(['walk','photo','dance']);
   if(kind==='walk'){ startDate(a, b, pick(HANG_LOCS)); a.dateWith = b.dateWith = null; a.buddy = b; b.buddy = a; logNews(`🚶 ${a.d.name} 和 ${b.d.name} 尾巴翘翘地一起去散步了`); return true; }
   const em = kind==='photo' ? '📸' : kind==='dance' ? '💃' : '☃️';
@@ -4098,6 +4105,18 @@ function doActivity(a, b){
   if(kind==='snow') burst(scene, mid, '❄️', 10, 1.2); else if(kind==='photo'){ burst(scene, mid, '✨', 6, .8); tone(1800,.04,'square',.04); } else burst(scene, mid, '🎵', 6, .8);
   addFriend(a, b, 3);
   logNews(kind==='photo' ? `📸 ${a.d.name} 和 ${b.d.name} 一起拍了张合照` : kind==='dance' ? `💃 ${a.d.name} 和 ${b.d.name} 在路边追起了尾巴` : `☃️ ${a.d.name} 和 ${b.d.name} 在雪地里扑来扑去`);
+  return true;
+}
+
+// a cat that likes the owner sometimes tags along with them instead
+function playerActivity(c, me){
+  const kind = pick(['rub','rub','follow','photo']), em = kind==='photo' ? '📸' : kind==='rub' ? '💗' : '🐾';
+  if(kind==='follow'){ startDate(c, me, pick(HANG_LOCS)); c.dateWith = me.dateWith = null; c.buddy = me; me.buddy = c; logNews(`🐾 ${c.d.name} 一路跟着你，尾巴竖得高高的`); return true; }
+  [c,me].forEach(x=>{ x.state = 'happy'; x.timer = 2.4; x.happyEmoji = em; x.dest = null; });
+  const mid = c.p.root.position.clone().add(me.p.root.position).multiplyScalar(.5).setY(2.4);
+  burst(scene, mid, kind==='photo' ? '✨' : '💕', 6, .8);
+  addFriend(c, me, 3);
+  logNews(kind==='photo' ? `📸 你和 ${c.d.name} 拍了张合照，${ta(c.d)}一脸嫌弃又凑得很近` : `💗 ${c.d.name} 绕着你的腿蹭来蹭去`);
   return true;
 }
 
@@ -4117,9 +4136,16 @@ function playerMorning(extra){
   const fans = residents.filter(r=>r!==me && (r.d.friends[me.d.id]||0) >= 40).sort((x,y)=>(y.d.friends[me.d.id]||0)-(x.d.friends[me.d.id]||0)).slice(0,3);
   const r = fans.find(()=>Math.random() < .3); if(r){ const g = souvenir(); extra.push(`🎁 ${r.d.name} 叼给你一份礼物：${g}`); }
 }
+// the cats remember the owner's birthday too
+function ownerBirthday(me, extra){
+  const fans = residents.filter(r=>r!==me && !r.d.kid && r.state!=='away' && (r.d.friends[me.d.id]||0) >= 30);
+  fans.forEach(r=>extra.push(`🎁 ${r.d.name} 给你叼来生日礼物：${souvenir()}`));
+  extra.push(fans.length ? `🎂 今天是你的生日！${fans.length} 只猫咪一早就蹲在门口等你。点⭐自己可以在广场办派对` : `🎂 今天是你的生日！点⭐自己可以在广场办派对`);
+  if(fans.length){ addCoins(fans.length*10); toastLater(`🎂 生日快乐，铲屎官！${fans.map(r=>r.d.name).join('、')} 给你叼来了礼物`, 4500); }
+}
 let inviteFrom = null;
 function maybeInvite(){
-  const me = playerRes(); if(!me || isNight() || inviteFrom) return;
+  const me = playerRes(); if(!me || isNight() || inviteFrom || ev || show || birth || mode!=='island' || $('#modalRoot').children.length) return;
   const pool = residents.filter(r=>r!==me && r.p.root.visible && !inEvent(r) && (r.d.friends[me.d.id]||0) >= 30);
   if(!pool.length || Math.random() > .5) return;
   const r = pick(pool); inviteFrom = r;
@@ -4386,7 +4412,7 @@ function partyMorning(extra){
   if(!hosts.length) return;
   const h = pick(hosts), guests = residents.filter(o=>o!==h && !o.d.kid && (h.d.friends[o.d.id]||0) >= 40).sort((x,y)=>(h.d.friends[y.d.id]||0)-(h.d.friends[x.d.id]||0)).slice(0,4);
   S.party = {day:S.day, host:h.d.id, guests:guests.map(g=>g.d.id)};
-  extra.push(`🎉 ${h.d.name} 今晚 6 点在窝里开派对，邀请了 ${guests.map(g=>g.d.name).join('、')}`);
+  extra.push(`🎉 ${h.d.name} 今晚 6 点在窝里开派对，邀请了 ${guests.map(g=>g.d.isPlayer ? '你' : g.d.name).join('、')}`);
 }
 const partyNote = sprite(bubbleTexPlain('🎉'), 1.4, 1.4); partyNote.visible = false; scene.add(partyNote);
 function partyHourly(prev){
@@ -4400,7 +4426,7 @@ function partyHourly(prev){
     const guests = residents.filter(r=>r.state==='visit' && r.visiting===host.d.id);
     guests.forEach(g=>{ g.state = 'idle'; g.timer = rand(.5,2); g.p.root.position.copy(doorPoint(host.d.slot)); g.p.root.visible = true; addFriend(host, g, 5); });
     for(let i=0;i<guests.length;i++) for(let j=i+1;j<guests.length;j++) addFriend(guests[i], guests[j], 3);
-    if(guests.length) logNews(`🎉 ${host.d.name} 家的派对很热闹，${guests.map(g=>g.d.name).join('、')} 都去了`);
+    if(guests.length) logNews(`🎉 ${host.d.name} 家的派对很热闹，${guests.map(g=>g.d.isPlayer ? '你' : g.d.name).join('、')} 都去了`);
     if(mode==='room' && roomRes===host){ buildRoomKeepChar(); renderRoomBar(); }
   }
 }
@@ -5279,7 +5305,7 @@ function dramaMorning(extra){
   adults.forEach(r=>{
     const d = r.d;
     // the crush has found someone else
-    if(d.crush){ const o = byId(d.crush.id); if(!o || o.d.partner){ if(o) extra.push(`💧 ${d.name} 暗恋了 ${o.d.name} 好久，还没去蹭蹭，${o.d.name} 就有对象了……`); d.crush = null; d.mood = clamp(d.mood-20,0,100); return; } }
+    if(d.crush){ const o = byId(d.crush.id); if(o && o.d.partner===d.id){ d.crush = null; return; } if(!o || o.d.partner){ if(o) extra.push(`💧 ${d.name} 暗恋了 ${o.d.name} 好久，还没去蹭蹭，${o.d.name} 就有对象了……`); d.crush = null; d.mood = clamp(d.mood-20,0,100); return; } }
     if(d.partner || hasSocialWant(r)) return;
     // old flames
     const ex = d.ex && byId(d.ex);
@@ -5657,7 +5683,7 @@ function morning(){
   const tip = DAY_TIPS[S.day]; if(tip) toastLater('💡 ' + tip, 3200);
   if(moonNight()) extra.push('🌕 今晚满月！10 点以后猫咪们会溜出家门，在广场开月夜猫集会，熬夜去看看吧');
   if(isFestival()) extra.push('🎆 今晚 7 点半，广场上空有烟花大会，猫咪们都会来看！');
-  residents.forEach(r=>{ if(r.d.want && r.d.want.type==='bday') r.d.want = null; if(isBday(r.d)){ birthdayAge(r); r.d.want = {type:'bday'}; extra.push(`🎂 今天是 ${r.d.name} 的生日！去广场给${ta(r.d)}办个派对吧`); if(!r.d.isPlayer) toastLater(`🎂 今天是 ${r.d.name} 的生日！点${ta(r.d)}就能在广场办生日派对`, 4500); } });
+  residents.forEach(r=>{ if(r.d.want && r.d.want.type==='bday'){ r.d.want = r.d.wantBack || null; r.d.wantBack = null; } if(isBday(r.d)){ birthdayAge(r); if(r.d.want && !['food','candy'].includes(r.d.want.type)) r.d.wantBack = r.d.want; r.d.want = {type:'bday'}; if(r.d.isPlayer){ ownerBirthday(r, extra); return; } extra.push(`🎂 今天是 ${r.d.name} 的生日！去广场给${ta(r.d)}办个派对吧`); if(!r.d.isPlayer) toastLater(`🎂 今天是 ${r.d.name} 的生日！点${ta(r.d)}就能在广场办生日派对`, 4500); } });
   if(!S.visitor && Math.random() < .4){ S.visitor = makeVisitor(); spawnVisitor(); extra.push(`🚢 流浪猫 ${S.visitor.d.name} 搭渔船来到了渔港，去看看要不要领养它吧`); }
   S.weather = {day:S.day, kind:pickWeather()}; if(S.weather.kind==='rain' && Math.random() < .5) S.weather.rainbow = true;
   extra.unshift(`${SEASONS[seasonIdx()].e} 今天${WEATHER[S.weather.kind].n}${S.weather.kind==='rain' ? '，猫咪们都不爱出门' : S.weather.kind==='snow' ? '，可以去雪地踩爪印啦' : ''}`);
@@ -6928,11 +6954,14 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkUp
 if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, catPartAt, moonStart, moonEnd, gatherNow, moonSpot, catSpeak, heard, get mode(){ return mode; }, get stroke(){ return stroke; }, get renderer(){ return renderer; }, get camera(){ return camera; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
 // a new island starts with you: make the owner first, then meet the cats
 setTimeout(()=>{ if(S && !S.playerId && !S.meAsked && !$('#modalRoot').children.length){ S.meAsked = true; openMe(); } else toast('点一点小猫，看看它们想要什么吧！'); }, 1500);
-setTimeout(()=>{ if(!$('#modalRoot').children.length) toast('点猫屋可以进窝里布置哦'); }, 3800);
+setTimeout(()=>{ if(S && S.day <= 1 && !$('#modalRoot').children.length) toast('点猫屋可以进窝里布置哦'); }, 3800);
 // tips wait until no window is open, so they never cover the character editor
 function toastLater(msg, ms){ setTimeout(function go(){ if($('#modalRoot').children.length) return setTimeout(go, 2000); toast(msg); }, ms); }
-toastLater('猫咪们会交朋友、哈气吵架、谈恋爱……多留意它们的心愿 💘', 7000);
-toastLater('点点岛上的猫咖、舞台、摩天轮和渔港，看看有什么好玩的', 10500);
+// the two intro tips are for a brand-new island only
+(function introTips(){ if(!S) return setTimeout(introTips, 2000); if(S.day > 1 || S.introDone) return; S.introDone = true;
+  toastLater('猫咪们会交朋友、哈气吵架、谈恋爱……多留意它们的心愿 💘', 5500);
+  toastLater('点点岛上的猫咖、舞台、摩天轮和渔港，看看有什么好玩的', 9000);
+})();
 })();
 </script>
 
