@@ -112,6 +112,7 @@ body.photo-on #hud,body.photo-on #dock,body.photo-on #toasts,body.photo-on #shee
 .crystal{text-align:center;padding:10px}.crystal .ball{width:130px;height:130px;margin:0 auto 12px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#C9B6FF 40%,#7A5CD6);border:3px solid var(--ink);display:grid;place-items:center;font-size:54px;animation:orb 1.6s ease-in-out infinite;box-shadow:0 0 30px #B48CFF}.crystal .ball.done{animation:none;box-shadow:0 0 40px #FFD23F}@keyframes orb{50%{transform:scale(1.06);filter:hue-rotate(40deg)}}
 .dot{position:absolute;top:-5px;right:-5px;width:14px;height:14px;border-radius:50%;background:var(--coral);border:2px solid var(--ink)}
 .say{margin:10px 0 0;background:#fff;border:2px solid var(--line);border-radius:14px;padding:7px 12px;font-size:15px;position:relative}
+.say-hint{display:block;font-size:12px;color:var(--ink-soft);margin-top:3px}
 .want-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-4px 0 12px;font-size:14px;color:var(--ink-soft)}
 .pill-btn.hot{background:var(--sun)}
 .news h3{font-family:var(--display);font-weight:400;font-size:19px;margin:6px 0 8px}
@@ -2442,6 +2443,8 @@ for(let i=0;i<400;i++){ const th = Math.random()*Math.PI*2, ph = Math.random()*M
 starGeo.setAttribute('position', new T.Float32BufferAttribute(sp,3));
 const stars = new T.Points(starGeo, new T.PointsMaterial({color:'#FFFBE0', size:1.3, transparent:true, opacity:0, fog:false}));
 scene.add(stars);
+const moon = new T.Mesh(new T.CircleGeometry(7, 32), new T.MeshBasicMaterial({color:'#FFF6C8', transparent:true, opacity:0, fog:false, depthWrite:false}));
+moon.position.set(-60, 95, -120); moon.lookAt(0, 0, 0); scene.add(moon);
 
 // selection ring
 const ring = new T.Mesh(new T.RingGeometry(.75,.95,32), new T.MeshBasicMaterial({color:'#FFC94D', transparent:true, opacity:.9})); ring.rotation.x = -Math.PI/2; ring.position.y = .04; ring.visible = false; scene.add(ring);
@@ -2669,6 +2672,7 @@ function endChat(r, natural){
   r.state = 'idle'; r.timer = rand(1,2.5);
 }
 function decide(r){
+  if(gatherNow() && r.p.isCat && !r.d.isPlayer){ r.state = 'walk'; r.dest = moonSpot(r); r.onArrive = 'moon'; r.target = null; return; }
   if(isNight()){ r.state = 'walk'; r.dest = doorPoint(homeSlot(r)); r.onArrive = 'home'; return; }
   if(r === selected){ r.state = 'idle'; r.timer = 1; return; }
   if(r.d.kid && kidAge(r.d) < 3){ const par = (r.d.parents||[]).map(byId).filter(x=>x && x.p.root.visible && x.state!=='home'); if(par.length){ const pp = pick(par).p.root.position; r.state = 'walk'; r.dest = new T.Vector3(pp.x + rand(-1.2,1.2), 0, pp.z + rand(-1.2,1.2)); r.onArrive = null; r.target = null; return; } }
@@ -2682,7 +2686,7 @@ function decide(r){
   if(workTime() && !r.d.kid && !r.d.isPlayer && r.d.job && JOBS[r.d.job] && JOBS[r.d.job].loc && LOCS[JOBS[r.d.job].loc] && Math.random() < .45){ goHang(r, JOBS[r.d.job].loc); r.working = true; return; }
   if(weather()==='rain' && Math.random() < .25){ goHang(r, pick(['cafe','library','ramen'])); return; }
   if(campTime() && Math.random() < .3){ goHang(r, 'camp'); return; }
-  if(Math.random() < .13){ const k = pick(HANG_LOCS); if(k==='petpark' && !pets.some(pw=>pw.d.owner===r.d.id)) goHang(r, 'park'); else goHang(r, k); return; }
+  if(Math.random() < .13){ goHang(r, pick(HANG_LOCS)); return; }
   const roll = Math.random(), chatty = .22 + ((r.d.traits && r.d.traits.social) ?? 4)*.035;
   if(roll < chatty){
     const pt = r.d.partner && byId(r.d.partner);
@@ -2731,12 +2735,12 @@ function animateCat(r, dt, t){
   else if(st==='happy') clip = r.happyClip || 'hop';
   else if(st==='sing') clip = 'meow';
   else if(st==='pet') clip = 'pet';
-  else if(st==='chat' || st==='hang') clip = r.meowT > 0 ? 'meow' : (r.chatClip || (r.chatClip = pick(['sit','sit','idle','loaf'])));
+  else if(st==='chat' || st==='hang' || st==='moon') clip = r.meowT > 0 ? 'meow' : (r.chatClip || (r.chatClip = pick(['sit','sit','idle','loaf'])));
   else if(r.angryT > 0) clip = 'hiss';
   else if(st==='box') clip = r.boxClip || 'loaf';
   else if(st==='idle'){ r.idleT = (r.idleT || 0) - dt; if(!r.idleClip || r.idleT <= 0){ r.idleClip = catIdleClip(r); r.idleT = rand(5, 11); } clip = r.idleClip; }
   else clip = r.pose && CAT_CLIPS[r.pose] ? r.pose : 'sit';
-  if(st!=='chat' && st!=='hang') r.chatClip = null;
+  if(st!=='chat' && st!=='hang' && st!=='moon') r.chatClip = null;
   if(st!=='eat') catBowl(r, false);
   if(r.meowT > 0) r.meowT -= dt;
   if(r.sleepyT > 0) r.sleepyT -= dt;
@@ -2808,6 +2812,7 @@ function updateResident(r, dt, t){
         else if(r.onArrive==='visit'){ r.state = 'visit'; r.p.root.visible = false; r.onArrive = null; if(selected===r) closeSheet(); }
         else if(r.onArrive==='home'){ r.state='home'; r.p.root.visible=false; if(selected===r) closeSheet(); }
         else if(r.onArrive==='box'){ r.onArrive = null; enterBox(r); }
+        else if(r.onArrive==='moon'){ r.onArrive = null; r.state = 'moon'; r.timer = rand(2,6); }
         else { r.state='idle'; r.timer = rand(1.5,4); }
       } else {
         const step = Math.min(dist, r.speed*dt); pos.x += dx/dist*step; pos.z += dz/dist*step;
@@ -2820,6 +2825,10 @@ function updateResident(r, dt, t){
     r.chatT -= dt; if(r.chatT<=0){ r.chatT = 1.1; r.topic = pick(CHAT_TOPICS); }
     convoTick(r, dt);
     if(r.timer<=0 || !r.target) endChat(r, true);
+  } else if(r.state==='moon'){
+    turnTo(r.p.root, angleTo(pos, MOON_C), dt*4);
+    if(r.timer <= 0){ r.timer = rand(3,7); if(Math.random() < .35) r.meowT = 1.2; }
+    if(!gatherNow()){ r.state = 'idle'; r.timer = rand(.2,1.5); }
   } else if(r.state==='box'){
     if(r.timer<=0 || isNight() || !r.box) leaveBox(r);
   } else if(r.state==='happy' || r.state==='eat'){
@@ -3067,7 +3076,7 @@ function modalHead(title){ return `<div class="modal-head"><h2>${title}</h2><but
 function locSpot(k){
   const L = LOCS[k];
   if(k==='beach'){ const d = Math.hypot(L.x,L.z), k2 = (isleR-1.8)/d; return new T.Vector3(L.x*k2+rand(-1,1), 0, L.z*k2+rand(-1,1)); }
-  if(k==='petpark' || k==='sports') return new T.Vector3(L.x + rand(-1.6,1.6), 0, L.z + rand(-1.2,1.2));
+  if(k==='sports') return new T.Vector3(L.x + rand(-1.6,1.6), 0, L.z + rand(-1.2,1.2));
   if(k==='camp'){ const a = rand(0, Math.PI*2); return new T.Vector3(L.x + Math.cos(a)*1.9, 0, L.z + Math.sin(a)*1.9); }
   const d = Math.hypot(L.x,L.z), ux = -L.x/d, uz = -L.z/d, px = -uz, pz = ux, off = L.r + (k==='cafe' ? 1.7 : 1.1), side = rand(-1.2,1.2);
   return new T.Vector3(L.x + ux*off + px*side, 0, L.z + uz*off + pz*side);
@@ -3099,10 +3108,8 @@ function openLoc(k){
   if(k==='chess') return toast('♟️ 退休的老猫们最喜欢在这里趴着晒太阳');
   if(k==='ramen') return openRamen();
   if(k==='library') return openLibrary();
-  if(k==='petpark') return openPetPark();
   if(k==='sports') return openRace([]);
   if(k==='camp') return campTime() ? openCamp() : openBugs();
-  if(k==='pool') return openPool();
   if(k==='salon') return openSalon();
   if(k==='flower'){ if(S.flowerDay !== S.day){ S.flowerDay = S.day; S.inv.acc.flower = (S.inv.acc.flower||0) + 1; S.inv.food.catnip = (S.inv.food.catnip||0) + 1; toast('🌿 在猫薄荷田摘了一朵小红花和一把猫薄荷 🍃', 'pink'); save(); } else toast('🌿 猫薄荷田香香的，情侣猫最喜欢来这里打滚约会'); return; }
   if(k==='tower'){
@@ -3647,15 +3654,6 @@ function openLibrary(){
     toast(`${r.d.name} 趴在${book}上，看得津津有味 📖`); logNews(`📚 ${r.d.name} 去图书馆翻了${book}`); save();
   });
 }
-function openPetPark(){
-  const vis = pets.filter(pw=>pw.p.root.visible);
-  if(!vis.length){ toast(pets.length ? '宠物们都睡着了，明天再来玩吧' : '🐾 宠物乐园：岛上还没有宠物，先去捏一只吧'); return; }
-  const L = LOCS.petpark;
-  vis.forEach(pw=>{ pw.parkT = 14; pw.parkDest = null; pw.d.mood = clamp((pw.d.mood ?? 80) + 20, 0, 100); const o = pw.d.owner && byId(pw.d.owner); if(o) o.d.mood = clamp(o.d.mood + 5, 0, 100); });
-  if(selected) closeSheet();
-  cam.goal.set(L.x*.9, 0, L.z*.9);
-  toast(`🐾 ${vis.length} 只宠物在宠物乐园玩疯啦！`, 'pink'); logNews(`🐾 宠物们在宠物乐园一起玩了一下午`); save();
-}
 function openSports(sel){
   const avail = residents.filter(r=>r.p.root.visible && r.state!=='home' && !inEvent(r) && !r.d.kid);
   openModal(modalHead('🐾 跑酷场') + `<p class="tip">选两只猫咪比一比，看谁先跳上高台！快慢和性格有关（好动的猫跳得快），也要看运气。</p>
@@ -3682,12 +3680,6 @@ function openCamp(){
   here.forEach(r=>{ r.d.mood = clamp(r.d.mood+15,0,100); beHappy(r, pick(['😆','😱','🥰']), 1.8); });
   for(let i=0;i<here.length;i++) for(let j=i+1;j<here.length;j++) addFriend(here[i], here[j], 3);
   toast(`🔥 ${pick(here).d.name} 讲了${story}，大家听得入迷了`, 'pink'); logNews(`🔥 ${here.map(r=>r.d.name).join('、')} 围着篝火听了${story}`); save();
-}
-function openPool(){
-  pickResident('🏊 游泳池', '选一只猫咪去戏水：心情变好，不过玩完会饿哦。', r=>{
-    closeModal(); goHang(r, 'pool'); r.d.mood = clamp(r.d.mood+15,0,100); r.d.full = clamp(r.d.full-12,0,100);
-    toast(`${r.d.name} 小心翼翼地伸爪碰了碰水 🏊`); logNews(`🏊 ${r.d.name} 在水池边玩了一会儿水`); save();
-  });
 }
 function campTick(t){
   const lit = campTime() || (S.hour >= 21 || S.hour < 6);
@@ -4020,12 +4012,22 @@ function textBubbleTex(text){
   g.fillStyle = '#3B3355'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 52);
   const t = new T.CanvasTexture(c); textTexCache[text] = t; return t;
 }
+// without the translator, cats talk in cat: the same line always turns into the same meows
+const MEOWS = ['喵','喵呜','咪','喵喵','呼噜','喵嗷','咪呀','喵～'];
+function catSpeak(line){
+  let h = 7; for(const ch of line) h = (h*31 + ch.charCodeAt(0)) >>> 0;
+  const n = clamp(Math.round(line.length/5), 1, 5), out = [];
+  for(let i=0;i<n;i++){ out.push(MEOWS[h % MEOWS.length]); h = (h*1103515245 + 12345) >>> 0; }
+  const end = /[？?]/.test(line) ? '？' : /[！!]/.test(line) ? '！' : '～';
+  return out.join(h % 2 ? '，' : '') + end;
+}
+function heard(r, line){ return !line || S.translator || !r.p.isCat ? line : catSpeak(line); }
 function setTalkBubble(r, text){
   if(!r.tb){ r.tb = sprite(textBubbleTex('…'), 4, 1); r.tb.position.y = r.p.bubbleY - .1; r.tb.visible = false; r.p.root.add(r.tb); }
   if(r.tb.parent !== r.p.root) r.p.root.add(r.tb);
   if(!text){ r.tb.visible = false; return; }
   r.meowT = 1.1; if(r.p.isCat && mode==='island' && r.p.root.visible && cam.target.distanceTo(r.p.root.position) < 16) meow(r.d.voice, text);
-  r.tb.material.map = textBubbleTex(text); r.tb.material.needsUpdate = true; r.tb.visible = true;
+  r.tb.material.map = textBubbleTex(heard(r, text)); r.tb.material.needsUpdate = true; r.tb.visible = true;
 }
 function convoFor(a, b){
   const A = a.d, B = b.d, fv = A.friends[B.id]||0, w = weather(), food = FOODS[A.fav] ? FOODS[A.fav].n : '小鱼干';
@@ -4069,7 +4071,7 @@ function endConvo(r){ if(r.convo){ r.convo = null; } if(r.tb) setTalkBubble(r, n
 // after a good chat, friends sometimes do something together
 function doActivity(a, b){
   const w = weather(), kind = w==='snow' ? pick(['snow','snow','walk','photo']) : pick(['walk','photo','dance']);
-  if(kind==='walk'){ startDate(a, b, pick(HANG_LOCS.filter(k=>k!=='petpark'))); a.dateWith = b.dateWith = null; a.buddy = b; b.buddy = a; logNews(`🚶 ${a.d.name} 和 ${b.d.name} 尾巴翘翘地一起去散步了`); return true; }
+  if(kind==='walk'){ startDate(a, b, pick(HANG_LOCS)); a.dateWith = b.dateWith = null; a.buddy = b; b.buddy = a; logNews(`🚶 ${a.d.name} 和 ${b.d.name} 尾巴翘翘地一起去散步了`); return true; }
   const em = kind==='photo' ? '📸' : kind==='dance' ? '💃' : '☃️';
   [a,b].forEach(x=>{ x.state = 'happy'; x.timer = 2.4; x.happyEmoji = em; x.dest = null; });
   const mid = a.p.root.position.clone().add(b.p.root.position).multiplyScalar(.5).setY(2.4);
@@ -4343,11 +4345,12 @@ function openShop(tab){
   const html = `<div class="modal-head"><h2>猫粮店</h2><div class="coins toy" style="margin-left:auto"><span class="coin"></span>${S.coins}</div><button class="toy close" data-close="1" aria-label="关闭">×</button></div>
     <div class="tabs">${[['food','好吃的'],['acc','礼物饰品'],['cloth','装扮'],['furn','家具']].map(([k,n])=>`<button class="toy tab ${k===shopTab?'on':''}" data-tab="${k}">${n}${sh.special.tab===k?' 🏷️':''}</button>`).join('')}</div>
     <div class="shop-grid">${keys.map(k=>{ const v = cat[k], left = sh.stock[shopTab][k], pr = shopPrice(shopTab,k), sp = pr < v.p; return `<div class="card">${sp ? '<span class="sale">今日特价</span>' : ''}<span class="ic">${v.e}</span><span class="nm">${v.n}</span><span class="own">已有 ${inv[k]||0} · 剩 ${left} 件</span><button class="toy buy" data-buy="${k}" ${S.coins<pr || left<=0 ? 'disabled' : ''}><span class="coin"></span>${sp ? `<s>${v.p}</s> ` : ''}${left<=0 ? '卖完了' : pr}</button></div>`; }).join('')}</div>
-    <div class="row-btns" style="margin-top:12px"><button class="toy pill-btn" data-kitchen="1">🍳 去做猫饭，用食材做菜</button></div><p style="font-size:13px;color:var(--ink-soft);margin:14px 0 0">🛒 每天早上进不同的货，数量有限，还有一样打 6 折的今日特价。${shopTab==='food' ? '猫咪牛奶、猫草茶在猫咖，寿司、烤鱼在鱼料理店。' : shopTab==='cloth' ? '买来的装扮可以在「送礼物」里给猫咪戴上。' : ''}</p>`;
+    <div class="row-btns" style="margin-top:12px">${S.translator ? '' : `<button class="toy pill-btn hot" data-translator="1" ${S.coins < 80 ? 'disabled' : ''}>🗣️ 猫语翻译器 · 80 金币</button>`}<button class="toy pill-btn" data-kitchen="1">🍳 去做猫饭，用食材做菜</button></div><p style="font-size:13px;color:var(--ink-soft);margin:14px 0 0">🛒 每天早上进不同的货，数量有限，还有一样打 6 折的今日特价。${shopTab==='food' ? '猫咪牛奶、猫草茶在猫咖，寿司、烤鱼在鱼料理店。' : shopTab==='cloth' ? '买来的装扮可以在「送礼物」里给猫咪戴上。' : ''}</p>`;
   openModal(html, b=>{
     if(!b) return;
     if(b.dataset.tab){ sfx.pop(); openShop(b.dataset.tab); }
     if(b.dataset.kitchen){ openKitchen(); return; }
+    if(b.dataset.translator){ if(S.coins < 80 || S.translator) return; S.coins -= 80; S.translator = true; updateCoins(); sfx.coin(); toast('🗣️ 戴上猫语翻译器，终于听懂猫咪在说什么啦！', 'gold'); save(); openShop(); if(selected) renderSheet(); return; }
     if(b.dataset.buy){ const k = b.dataset.buy, it = cat[k], pr = shopPrice(shopTab,k); if(S.coins < pr || sh.stock[shopTab][k] <= 0) return; S.coins -= pr; sh.stock[shopTab][k]--; inv[k] = (inv[k]||0)+1; updateCoins(); sfx.coin(); toast(`买到了${it.n}！`); save(); openShop(); }
   });
 }
@@ -5487,7 +5490,7 @@ function petExtraTick(dt){
         pw.strollDest = null;
         if(pw.d.treasureDay !== S.day && Math.random() < .4){ pw.d.treasureDay = S.day; const g = souvenir(); pw.happyT = 2; toast(`🐾 ${pw.d.name} 散步回来，叼回了一个宝物：${g}`, 'gold'); logNews(`🐾 ${pw.d.name} 在外面找到了 ${g}`); save(); }
       }
-    } else if(!pw.parkT && Math.random() < .012*k){ pw.strollT = rand(12, 22); }
+    } else if(Math.random() < .012*k){ pw.strollT = rand(12, 22); }
   });
   for(let i=0;i<pets.length;i++) for(let j=i+1;j<pets.length;j++){
     const A = pets[i], B = pets[j]; if(!A.p.root.visible || !B.p.root.visible) continue;
@@ -5532,6 +5535,25 @@ function birthdayAge(r){
 function isNight(){ return S.hour >= 21 || S.hour < 6; }
 function isFestival(){ return S.day % 3 === 0 || (holiday() && holiday().id==='summer'); }
 function festivalNow(){ return isFestival() && S.hour >= 19.5 && S.hour < 21; }
+// full-moon nights: after 10pm the cats slip out of their homes and sit in a ring on the plaza
+function moonNight(){ return S.day % 7 === 0; }
+function gatherNow(){ return moonNight() && S.hour >= 22 && S.hour < 23.8; }
+const MOON_C = new T.Vector3(0, 0, 0); // round the fountain
+function moonCats(){ return residents.filter(r=>r.p.isCat && !r.d.isPlayer && r.state!=='away'); }
+function moonSpot(r){ const L = moonCats(), i = Math.max(0, L.indexOf(r)), n = Math.max(1, L.length), R = clamp(n*.55, 4.2, 5.2), a = i/n*Math.PI*2; return new T.Vector3(MOON_C.x + Math.cos(a)*R, 0, MOON_C.z + Math.sin(a)*R); }
+function moonStart(){
+  moonCats().forEach(r=>{ if(r.state==='home' || r.state==='visit'){ r.p.root.position.copy(doorPoint(homeSlot(r))); r.p.root.visible = true; } if(!inEvent(r) && r.state!=='box'){ r.state = 'walk'; r.dest = moonSpot(r); r.onArrive = 'moon'; r.target = null; } });
+  if(mode==='island' && !selected) cam.goal.copy(MOON_C);
+  toast('🌕 月夜猫集会开始啦！猫咪们悄悄溜出家门，在广场围成一圈', 'gold');
+}
+function moonEnd(){
+  const L = moonCats().filter(r=>r.state==='moon'); if(L.length < 2) return;
+  for(let i=0;i<L.length;i++) for(let j=i+1;j<L.length;j++) addFriend(L[i], L[j], 3);
+  const watched = mode==='island' && !paused;
+  L.forEach(r=>{ r.d.mood = clamp(r.d.mood + 8, 0, 100); if(watched) bondUp(r, 2); });
+  logNews(`🌕 昨晚满月，${L.length} 只猫咪在广场开了月夜猫集会，${pick(['对着月亮唱了好久的歌','交换了岛上的小秘密','排着队互相舔了毛','选出了新的猫老大'])}`);
+  toast(watched ? `🌕 集会散啦。你陪大家熬了夜，${L.length} 只猫咪都更亲你了` : '🌕 集会散啦，猫咪们回窝睡觉', 'pink'); save();
+}
 const KEYS = [[0,SKY_NIGHT,.1,.25],[5,SKY_NIGHT,.1,.25],[6.5,SKY_DUSK,.55,.5],[8,SKY_DAY,.75,.65],[17,SKY_DAY,.75,.65],[19,SKY_DUSK,.5,.5],[20.5,SKY_NIGHT,.12,.28],[24,SKY_NIGHT,.1,.25]];
 const tmpC = new T.Color();
 function applySky(){
@@ -5540,7 +5562,7 @@ function applySky(){
   tmpC.copy(a[1]).lerp(b[1], k); scene.background.copy(tmpC); scene.fog.color.copy(tmpC);
   sun.intensity = lerp(a[2],b[2],k); hemi.intensity = lerp(a[3],b[3],k);
   const night = 1 - clamp((sun.intensity-.12)/.5,0,1);
-  stars.material.opacity = night;
+  stars.material.opacity = night; moon.material.opacity = night; moon.visible = night > .02; moon.scale.setScalar(typeof moonNight==='function' && moonNight() ? 1.6 : .8);
   windowMat.color.set(night > .5 ? '#FFD27A' : '#BFE8FF');
   const ang = (h-6)/15*Math.PI; sun.position.set(Math.cos(ang)*30, Math.max(8,Math.sin(ang)*35), 15);
   weatherSky();
@@ -5553,6 +5575,8 @@ function tickTime(dt){
   if(prev < 6 && S.hour >= 6) morning();
   if(prev < 19.5 && S.hour >= 19.5 && isFestival()){ toast('烟花大会开始啦！猫咪们都来广场啦','gold'); residents.forEach(r=>{ if(r.state==='idle'||r.state==='walk'){ r.state='idle'; r.timer=rand(0,1.5); r.watching=false; } }); }
   if(prev < 20 && S.hour >= 20 && S.visitor){ toast(`🚢 流浪猫 ${S.visitor.d.name} 搭渔船离开了小岛`); logNews(`🚢 流浪猫 ${S.visitor.d.name} 离开了小岛，继续流浪去了`); S.visitor = null; despawnVisitor(); save(); }
+  if(prev < 22 && S.hour >= 22 && moonNight()) moonStart();
+  if(prev < 23.8 && S.hour >= 23.8 && moonNight()) moonEnd();
   if(prev < 21 && S.hour >= 21) toast('天黑啦，猫咪们都回窝睡觉了。可以去它们家里看看哦', 'n');
   const night = isNight(); $('#bSleep').hidden = !night || mode!=='island';
   const hh = Math.floor(S.hour), mm = Math.floor((S.hour-hh)*60/10)*10;
@@ -5562,6 +5586,15 @@ function tickTime(dt){
   if((prev < 11 && S.hour >= 11) || (prev < 15 && S.hour >= 15)) maybeInvite();
   applySky();
 }
+const DAY_TIPS = {
+  2:'在猫咪身上来回划，就是撸猫。摸头摸背会打呼噜，摸肚子小心被挠',
+  3:'点猫咪的房子能进它家，猫粮店有猫爬架、猫砂盆，摆进去猫咪会自己去用',
+  4:'岛上会冒出纸箱 📦，猫咪看见就想钻进去，去找找看',
+  5:'🏢 猫公寓里有 🔮占卜屋、🎨设计工坊、🍳做猫饭，都去试试吧',
+  6:'猫粮店卖 🍃猫薄荷，喂给猫咪会开心地打滚',
+  8:'5 个月大的小猫会去 🏫猫咪学校上学，1 岁毕业',
+  9:'听不懂猫咪在说什么？猫粮店有 🗣️猫语翻译器'
+};
 function morning(){
   S.day += 1; S.hour = Math.max(S.hour, 6);
   residents.forEach(r=>{ if(r.state==='home' || r.state==='visit'){ r.state='idle'; r.timer=rand(.2,2); r.p.root.position.copy(doorPoint(homeSlot(r))); r.p.root.visible = true; } });
@@ -5582,6 +5615,8 @@ function morning(){
       extra.push(kid ? `🐾 ${r.d.name} 和 ${pt.d.name} 家要添小猫啦！` : `📦 ${r.d.name} 和 ${pt.d.name} 想要小猫，可是小岛住满啦`);
     }
   });
+  const tip = DAY_TIPS[S.day]; if(tip) setTimeout(()=>toast('💡 ' + tip, 'n'), 3200);
+  if(moonNight()) extra.push('🌕 今晚满月！10 点以后猫咪们会溜出家门，在广场开月夜猫集会，熬夜去看看吧');
   if(isFestival()) extra.push('🎆 今晚 7 点半，广场上空有烟花大会，猫咪们都会来看！');
   residents.forEach(r=>{ if(r.d.want && r.d.want.type==='bday') r.d.want = null; if(isBday(r.d)){ birthdayAge(r); r.d.want = {type:'bday'}; extra.push(`🎂 今天是 ${r.d.name} 的生日！去广场给${ta(r.d)}办个派对吧`); } });
   if(!S.visitor && Math.random() < .4){ S.visitor = makeVisitor(); spawnVisitor(); extra.push(`🚢 流浪猫 ${S.visitor.d.name} 搭渔船来到了渔港，去看看要不要领养它吧`); }
@@ -5802,7 +5837,7 @@ function renderSheet(){
       <span>饱饱</span><div class="bar full"><i id="bFull"></i></div><span class="num" id="nFull"></span>
       <span>成长</span><div class="bar xp"><i style="width:${d.xp/3*100}%"></i></div><span class="num">${d.xp}/3</span>
     </div>
-    <div class="say">“${esc(r.say || talk(r))}”</div>
+    <div class="say">“${esc(heard(r, r.say || talk(r)))}”${!S.translator && r.p.isCat ? '<span class="say-hint">🗣️ 猫粮店的猫语翻译器能听懂</span>' : ''}</div>
     ${dreamHtml(d)}<div class="want ${wt?'':'none'}"><span class="big">${wt?wantEmoji(d.want):'😊'}</span><span>${wt ? wt : (r.state==='home'?'正在打呼噜，呼呼…':'现在很满足，咕噜噜')}</span></div>${wantActs}${lvBox}
     <div class="acts">
       <button class="toy act c1" data-act="feed"><span class="ic">🐟</span>喂食物</button>
@@ -6576,12 +6611,7 @@ function updatePet(pw, dt, t){
   let goal = null, speed = 1.3;
   if(pw.happyT > 0){ pw.happyT -= dt; pw.p.rig.position.y = Math.abs(Math.sin(t*9))*.25; pw.p.rig.rotation.y += dt*6; pw.p.tail.rotation.z = Math.sin(t*20)*.8; return; }
   pw.p.rig.rotation.y = 0;
-  if(pw.parkT > 0){
-    pw.parkT -= dt; const L = LOCS.petpark;
-    if(!pw.parkDest || Math.hypot(pw.parkDest.x-pos.x, pw.parkDest.z-pos.z) < .3) pw.parkDest = new T.Vector3(L.x + rand(-2,2), 0, L.z + rand(-2,2));
-    goal = pw.parkDest; speed = 2.6; pw.state = 'walk';
-  }
-  else if(pw.strollT > 0){
+  if(pw.strollT > 0){
     if(!pw.strollDest || Math.hypot(pw.strollDest.x-pos.x, pw.strollDest.z-pos.z) < .3) pw.strollDest = randomSpot();
     goal = pw.strollDest; speed = 1.8; pw.state = 'walk';
   }
@@ -6795,6 +6825,7 @@ function boot(){
 S = loadState();
 S.inv = Object.assign({food:{},acc:{},furn:{},cloth:{}}, S.inv||{});
 if(!S.log) S.log = [];
+if(S.translator === undefined) S.translator = S.day > 1;
 S.residents.forEach(d=>{ if(!d.catch) d.catch = pick(CATCHES); if(d.partner===undefined) d.partner = null; if(!d.voice) d.voice = newVoice(); if(d.voice.seed==null) d.voice.seed = Math.random(); if(!d.voice.g){ d.voice.g = guessGender(d); if(d.voice.g==='m' && d.voice.pitch > 1.1) d.voice.pitch = Math.round(rand(.75,1.05)*10)/10; if(d.voice.g==='f' && d.voice.pitch < 1.05) d.voice.pitch = Math.round(rand(1.1,1.5)*10)/10; } if(!d.traits){ d.traits = traitsFor(d.pers); } if(!d.bday) d.bday = ri(1,YEAR); if(!d.outfit) d.outfit = 'tee'; if(!d.look.eyeColor) d.look.eyeColor = pick(EYE_COLORS.slice(0,3)); if(d.look.pattern===undefined) d.look.pattern = pick(['stripe','dots','stars','hearts','flowers','check']); if(!d.songs) d.songs = [songCopy(pick(SONG_BOOK))]; });
 if(S.visitor && (S.hour >= 20 || S.hour < 6)) S.visitor = null;
 S.residents.forEach(d=>{ if(!d.isPlayer && !(d.look && d.look.cat)) d.look = newCatLook(null, d.voice && d.voice.g); });
@@ -6834,7 +6865,7 @@ function showUpdateBar(){
 }
 checkUpdate(); setInterval(checkUpdate, 3*60*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkUpdate(); });
-if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, catPartAt, get stroke(){ return stroke; }, get renderer(){ return renderer; }, get camera(){ return camera; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
+if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, catPartAt, moonStart, moonEnd, gatherNow, moonSpot, catSpeak, heard, get mode(){ return mode; }, get stroke(){ return stroke; }, get renderer(){ return renderer; }, get camera(){ return camera; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
 // a new island starts with you: make the owner first, then meet the cats
 setTimeout(()=>{ if(S && !S.playerId && !S.meAsked && !$('#modalRoot').children.length){ S.meAsked = true; openMe(); } else toast('点一点小猫，看看它们想要什么吧！'); }, 1500);
 setTimeout(()=>toast('点猫屋可以进窝里布置哦'), 3800);
