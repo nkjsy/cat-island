@@ -435,9 +435,9 @@ const TALK_SUB = {
   cool:['安静一点比较好','我刚在书架顶上趴了一下午','一只猫也挺自在','……这很酷，对吧']
 };
 const YEAR = 10;
-const ADULT_AGE = 18, KID_DAYS = ADULT_AGE * 10; // children grow up over 18 island years (10 days each)
+const ADULT_AGE = 18, KID_DAYS = 30; // kittens grow up in 30 days (kidAge counts human-equivalent years, 18 = grown up)
 const MAX_KIDS = 3; // litters per family
-function kidAge(d){ return Math.max(0, (S.day - (d.bornDay ?? S.day)) / 10); }
+function kidAge(d){ return Math.max(0, (S.day - (d.bornDay ?? S.day)) * ADULT_AGE / KID_DAYS); }
 function kidStage(d){ const a = kidAge(d); return a < 3 ? '小奶猫' : a < 6 ? '小猫崽' : a < 12 ? '小猫咪' : '少年猫'; }
 function catKitten(d){ return !!(d && d.kid && kidAge(d) < 6); }
 // kittens use the round kitten model until 6, then the adult model grows into full size
@@ -3636,12 +3636,13 @@ function applyIsland(instant){
 }
 function applyIsleLevel(){ applyIsland(true); }
 // call after anyone moves in (new resident, baby, visitor)
-function checkExpand(){
+function checkExpand(buy){
   const before = isleRTarget, ringBefore = ringsBuilt.size + (expansionBuilt ? 1 : 0);
   let unlocked = false;
-  if(!S.isleLevel && residents.length >= 8){ S.isleLevel = 1; unlocked = true; }
+  if(buy && !S.isleLevel){ S.isleLevel = 1; unlocked = true; }
+  if(!S.isleLevel && !S.expandHint && residents.filter(r=>!r.d.isPlayer).length >= EXPAND_CATS){ S.expandHint = true; toastLater(`🏗️ 小岛住了 ${EXPAND_CATS} 只猫啦！去「猫公寓 → 小岛建设」可以扩建小岛`, 2500); logNews('🏗️ 猫咪越来越多，小岛可以扩建了：猫公寓 → 小岛建设'); }
   applyIsland(false);
-  if(isleRTarget > before + .05){
+  if(isleRTarget > before + .05 || unlocked){
     if(selected) closeSheet();
     cam.goal.set(0,0,0); cam.distGoal = Math.min(camMax(), isleRTarget*2.1 + 10); cam.pitchGoal = .95;
     toast(`🏝️ 小岛又长大了一圈！现在住着 ${residents.filter(r=>!r.d.isPlayer).length} 只猫（最多 ${MAX_CATS} 只）`, 'gold');
@@ -3650,6 +3651,19 @@ function checkExpand(){
     else logNews(`🏝️ 小岛变大了一点，现在住着 ${residents.length} 只猫`);
   }
   save();
+}
+const EXPAND_PRICE = 800, EXPAND_CATS = 6, FW_PRICE = 150;
+function openBuild(){
+  const cats = residents.filter(r=>!r.d.isPlayer).length, fwTonight = isFestival(), late = S.hour >= 19.5 || isNight();
+  const ex = S.isleLevel ? '<p class="tip">✅ 已经扩建过了：🌿猫薄荷田、♨️温泉、🛁美容院都开张了。</p>'
+    : `<p class="tip">在小岛外圈填海造地，开出 🌿猫薄荷田、♨️温泉、🛁美容院，猫咪多了能去的地方也多。${cats < EXPAND_CATS ? `<br>要先住满 ${EXPAND_CATS} 只猫（现在 ${cats} 只）。` : ''}</p><button class="toy big-go" data-bx="1" ${cats >= EXPAND_CATS && S.coins >= EXPAND_PRICE ? '' : 'disabled'}>🏗️ 扩建小岛（${EXPAND_PRICE} 金币）</button>`;
+  const fw = fwTonight ? '<p class="tip">🎆 今晚 7 点半广场有烟花大会。</p>' : late ? '<p class="tip">今天太晚啦，明天白天再来订烟花吧。</p>'
+    : `<p class="tip">请烟花师傅今晚 7 点半在广场放一场烟花，猫咪们都会跑来看。</p><button class="toy big-go" data-bf="1" ${S.coins >= FW_PRICE ? '' : 'disabled'}>🎆 今晚放烟花（${FW_PRICE} 金币）</button>`;
+  openModal(modalHead('🏗️ 小岛建设') + `<div class="sec">扩建小岛</div>${ex}<div class="sec" style="margin-top:14px">烟花大会</div>${fw}`, b=>{
+    if(!b) return;
+    if(b.dataset.bx){ if(S.isleLevel || cats < EXPAND_CATS || S.coins < EXPAND_PRICE) return; addCoins(-EXPAND_PRICE); closeModal(); checkExpand(true); }
+    if(b.dataset.bf){ if(fwTonight || late || S.coins < FW_PRICE) return; addCoins(-FW_PRICE); S.fwDay = S.day; closeModal(); toast('🎆 订好啦！今晚 7 点半，广场上空放烟花', 'gold'); logNews('🎆 铲屎官请了烟花师傅，今晚广场放烟花'); save(); }
+  });
 }
 function isleTick(dt){
   if(Math.abs(isleR - isleRTarget) > .01) setIsleR(isleR + (isleRTarget - isleR)*Math.min(1, dt*1.2));
@@ -4350,7 +4364,7 @@ function openApartment(){
   const card = r=>{ const d = r.d, st = resStatus(r), need = d.lvPending ? '⭐' : d.want ? wantEmoji(d.want) : '';
     return `<button class="apt-win ${night && (r.state==='home' || r.state==='visit') ? 'lit' : ''}" data-apt="${residents.indexOf(r)}">${need ? `<span class="apt-need">${need}</span>` : ''}<img src="${portrait(d)}" alt=""><span class="apt-name">${d.isPlayer ? '⭐' : ''}${esc(d.name)}</span><span class="apt-st">${st.e} ${esc(st.t)}</span></button>`; };
   openModal(`<div class="modal-head"><h2>🏢 猫公寓</h2><button class="toy close" data-close="1" style="margin-left:auto" aria-label="关闭">×</button></div>
-    <div class="row-btns" style="margin-bottom:10px"><button class="toy pill-btn hot" data-me="1">🙋 ${playerRes() ? '我自己' : '捏一个你自己'}</button><button class="toy pill-btn" data-fortune="1">🔮 占卜屋</button><button class="toy pill-btn" data-mailbox="1">💌 信箱${(S.mail||[]).some(m=>!m.read) ? ' 🔴' : ''}</button><button class="toy pill-btn" data-design="1">🎨 设计工坊</button><button class="toy pill-btn" data-album="1">📷 相册</button><button class="toy pill-btn" data-treasure="1">💎 宝物箱</button><button class="toy pill-btn" data-book="1">📖 图鉴</button><button class="toy pill-btn" data-tree="1">👪 族谱</button><button class="toy pill-btn" data-kitchen="1">🍳 做猫饭</button><button class="toy pill-btn" data-saveio="1">💾 存档</button><button class="toy pill-btn" data-impres="1">🔗 导入猫咪</button></div>
+    <div class="row-btns" style="margin-bottom:10px"><button class="toy pill-btn hot" data-me="1">🙋 ${playerRes() ? '我自己' : '捏一个你自己'}</button><button class="toy pill-btn" data-fortune="1">🔮 占卜屋</button><button class="toy pill-btn" data-build="1">🏗️ 小岛建设</button><button class="toy pill-btn" data-mailbox="1">💌 信箱${(S.mail||[]).some(m=>!m.read) ? ' 🔴' : ''}</button><button class="toy pill-btn" data-design="1">🎨 设计工坊</button><button class="toy pill-btn" data-album="1">📷 相册</button><button class="toy pill-btn" data-treasure="1">💎 宝物箱</button><button class="toy pill-btn" data-book="1">📖 图鉴</button><button class="toy pill-btn" data-tree="1">👪 族谱</button><button class="toy pill-btn" data-kitchen="1">🍳 做猫饭</button><button class="toy pill-btn" data-saveio="1">💾 存档</button><button class="toy pill-btn" data-impres="1">🔗 导入猫咪</button></div>
     <div class="apt ${night ? 'night' : ''}"><div class="apt-roof">猫公寓 · 一扇窗一只猫 · ${residents.length}/${POP_MAX}</div>${floors.map(f=>`<div class="apt-floor">${f.map(card).join('')}</div>`).join('')}<div class="apt-door">🚪</div></div>
     <p class="tip">${night ? '晚上亮着灯的窗户，就是窝在家里的猫咪。' : '头上冒着图标的猫咪需要铲屎官帮忙。点窗户去找它。'}</p>`, b=>{
     if(!b) return;
@@ -4364,6 +4378,7 @@ function openApartment(){
     if(b.dataset.saveio){ openSaveIO(); return; }
     if(b.dataset.mailbox){ openMailbox(); return; }
     if(b.dataset.fortune){ openFortune(); return; }
+    if(b.dataset.build){ openBuild(); return; }
     if(b.dataset.impres){ openImportResident(); return; }
     if(b.dataset.apt){ const r = residents[+b.dataset.apt]; if(r.state==='away'){ toast(`${r.d.name} 去${r.d.trip ? r.d.trip.dest : '外地'}流浪旅行了，过几天才回来`); return; } closeModal(); if(r.state==='home' || r.state==='visit'){ enterRoom(r.state==='visit' ? (byId(r.visiting) || r) : r); } else { select(r); } }
   });
@@ -5102,7 +5117,7 @@ function calendarEvents(day){
   const ev = [], doy = ((day-1) % YEAR) + 1, w = weekday(day);
   if(HOLIDAYS[doy]) ev.push(`${HOLIDAYS[doy].e} ${HOLIDAYS[doy].n}`);
   if(w===2) ev.push('🛍️ 跳蚤市场'); if(w===5) ev.push('🐾 跑酷大赛');
-  if(day % 3 === 0) ev.push('🎆 烟花大会'); if(day % 4 === 0) ev.push('🏖️ 休息日');
+  if(day % 5 === 0 || S.fwDay === day) ev.push('🎆 烟花大会'); if(day % 4 === 0) ev.push('🏖️ 休息日');
   residents.forEach(r=>{ if(!r.d.kid && r.d.bday === doy) ev.push(`🎂 ${r.d.name}生日`); });
   return ev;
 }
@@ -5619,7 +5634,7 @@ function birthdayAge(r){
 
 /* ---------------- time of day ---------------- */
 function isNight(){ return S.hour >= 21 || S.hour < 6; }
-function isFestival(){ return S.day % 3 === 0 || (holiday() && holiday().id==='summer'); }
+function isFestival(){ return S.day % 5 === 0 || S.fwDay === S.day || (holiday() && holiday().id==='summer'); }
 function festivalNow(){ return isFestival() && S.hour >= 19.5 && S.hour < 21; }
 // full-moon nights: after 10pm the cats slip out of their homes and sit in a ring on the plaza
 function moonNight(){ return S.day % 7 === 0; }
@@ -6571,7 +6586,7 @@ function placeRoomCam(){
 
 /* ---------------- dock ---------------- */
 // the first few cats are free; after that a new cat costs coins, so adopting strays and raising kittens matter
-function newCatPrice(){ return residents.filter(r=>!r.d.isPlayer).length >= 6 ? 120 : 0; }
+function newCatPrice(){ return residents.filter(r=>!r.d.isPlayer).length >= 6 ? 300 : 0; }
 $('#bNew').onclick = ()=>{
   const n = newCatPrice(); if(!n) return openEditor();
   openModal(modalHead('🐈 接一只新猫') + `<p class="tip" style="text-align:center">岛上已经很热闹啦。再从外面接一只猫要 ${n} 金币。<br>渔港来的流浪猫可以免费领养，家里的猫咪也会生小猫哦。</p><div class="row-btns" style="justify-content:center"><button class="toy pill-btn hot" data-nc="1" ${S.coins < n ? 'disabled' : ''}>🐈 捏一只（${n} 金币）</button><button class="toy pill-btn" data-close="1">再等等</button></div>`, b=>{ if(b && b.dataset.nc){ closeModal(); openEditor(); } });
