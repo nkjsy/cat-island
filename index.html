@@ -2593,7 +2593,7 @@ function addFriend(a, b, delta){
   if(la.rank > lb.rank){
     const pl = a.d.isPlayer ? a : b.d.isPlayer ? b : null, ct = pl === a ? b : a;
     const line = pl ? `${ct.d.name} ${['','开始黏着你了','把你当成家里的一员了','认定你是全岛最好的铲屎官'][la.rank]}` : `${a.d.name} 和 ${b.d.name} ${la.msg}`;
-    toast(line, 'pink'); addCoins(la.rank*10); logNews(`${pl ? '💗' : '🤝'} ${line}`);
+    toast(line, 'pink'); if(pl) addCoins(la.rank*10); logNews(`${pl ? '💗' : '🤝'} ${line}`);
     const mid = a.p.root.position.clone().add(b.p.root.position).multiplyScalar(.5); mid.y = 2.4;
     burst(scene, mid, '💖', 8); sfx.happy();
   }
@@ -2870,10 +2870,12 @@ function needsTick(r, secs){
   if(d.isPlayer){ if(!(d.want && d.want.type==='bday')) d.want = null; d.full = Math.max(d.full, 70); d.mood = Math.max(d.mood, 70); return; }
   if(d.want && d.want.with){ const o = byId(d.want.with); if(!o || (d.want.type==='love' && !canRomance(r,o)) || (d.want.type==='propose' && d.partner!==o.d.id) || (d.want.type==='nest' && (d.partner!==o.d.id || d.pType!=='spouse'))) d.want = null; }
   if(r.state==='home'){ d.full = clamp(d.full - secs*.08, 0, 100); return; }
-  d.full = clamp(d.full - secs*.3, 0, 100);
+  d.full = clamp(d.full - secs*.22, 0, 100);
   const target = d.full < 25 ? 25 : (d.want ? 50 : 70);
   d.mood += (target - d.mood) * .01 * secs;
   if(d.full < 38 && (!d.want || ['pat','acc','furn','friend','play','cloth','ask','game','sleep','taste'].includes(d.want.type))){ d.want = {type:'food', item: Math.random()<.5 ? d.fav : null}; }
+  // really hungry: food comes first, the bigger wish waits until it's fed
+  else if(d.full < 15 && d.want && d.want.type!=='food' && !d.wantBack){ d.wantBack = d.want; d.want = {type:'food', item:null}; }
   if(!d.want && Math.random() < .008*secs){
     const opts = ['pat','acc','furn','play','cloth','ask','ask','game','game','sleep','taste','box','box','brush','brush'];
     if(residents.length > 1 && residents.some(o=>o!==r && (d.friends[o.d.id]||0) < 15)) opts.push('friend','friend');
@@ -5724,7 +5726,7 @@ function morning(){
   const tip = DAY_TIPS[S.day]; if(tip) toastLater('💡 ' + tip, 3200);
   if(moonNight()) extra.push('🌕 今晚满月！10 点以后猫咪们会溜出家门，在广场开月夜猫集会，熬夜去看看吧');
   if(isFestival()) extra.push('🎆 今晚 7 点半，广场上空有烟花大会，猫咪们都会来看！');
-  residents.forEach(r=>{ if(r.d.want && r.d.want.type==='bday'){ r.d.want = r.d.wantBack || null; r.d.wantBack = null; } if(isBday(r.d)){ birthdayAge(r); if(r.d.want && !['food','candy'].includes(r.d.want.type)) r.d.wantBack = r.d.want; r.d.want = {type:'bday'}; if(r.d.isPlayer){ ownerBirthday(r, extra); return; } extra.push(`🎂 今天是 ${r.d.name} 的生日！去广场给${ta(r.d)}办个派对吧`); if(!r.d.isPlayer) toastLater(`🎂 今天是 ${r.d.name} 的生日！点${ta(r.d)}就能在广场办生日派对`, 4500); } });
+  residents.forEach(r=>{ if(r.d.wantBack && ['bday','candy'].includes(r.d.wantBack.type)) r.d.wantBack = null; if(r.d.want && r.d.want.type==='bday'){ r.d.want = r.d.wantBack || null; r.d.wantBack = null; } if(isBday(r.d)){ birthdayAge(r); if(r.d.want && !['food','candy'].includes(r.d.want.type)) r.d.wantBack = r.d.want; r.d.want = {type:'bday'}; if(r.d.isPlayer){ ownerBirthday(r, extra); return; } extra.push(`🎂 今天是 ${r.d.name} 的生日！去广场给${ta(r.d)}办个派对吧`); if(!r.d.isPlayer) toastLater(`🎂 今天是 ${r.d.name} 的生日！点${ta(r.d)}就能在广场办生日派对`, 4500); } });
   if(!S.visitor && Math.random() < .4){ S.visitor = makeVisitor(); spawnVisitor(); extra.push(`🚢 流浪猫 ${S.visitor.d.name} 搭渔船来到了渔港，去看看要不要领养它吧`); }
   S.weather = {day:S.day, kind:pickWeather()}; if(S.weather.kind==='rain' && Math.random() < .5) S.weather.rainbow = true;
   extra.unshift(`${SEASONS[seasonIdx()].e} 今天${WEATHER[S.weather.kind].n}${S.weather.kind==='rain' ? '，猫咪们都不爱出门' : S.weather.kind==='snow' ? '，可以去雪地踩爪印啦' : ''}`);
@@ -5925,7 +5927,7 @@ function renderSheet(){
   const others = residents.filter(o=>o!==r);
   let ch = '';
   if(chooser==='feed'){
-    const items = Object.entries(S.inv.food).filter(([k,v])=>v>0);
+    const items = Object.entries(S.inv.food).filter(([k,v])=>v>0 && FOODS[k]);
     ch = `<div class="chooser"><h3>给 ${d.name} 吃什么？</h3>` + (items.length ? `<div class="grid-items">${items.map(([k,v])=>`<button class="toy item" data-feed="${k}">${d.fav===k?'<span class="fav">最爱</span>':''}<span class="ic">${FOODS[k].e}</span>${FOODS[k].n}<span class="cnt">${v}</span></button>`).join('')}</div>` : `<div class="empty">食物吃光啦。<button class="toy pill-btn" data-go="shop">去猫粮店</button></div>`) + `<div class="row-btns" style="margin-top:10px"><button class="toy pill-btn" data-go="kitchen">🍳 去做猫饭</button></div></div>`;
   } else if(chooser==='gift'){
     const items = Object.entries(S.inv.acc).filter(([k,v])=>v>0), clothes = Object.entries(S.inv.cloth||{}).filter(([k,v])=>v>0);

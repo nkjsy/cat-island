@@ -2,7 +2,7 @@
 // Everything from this site (the page, the cat model, music and meows) is fetched from the network first,
 // so an update always reaches players, and falls back to the cached copy when offline.
 // Libraries and fonts from CDNs have fixed version URLs, so they are served from the cache first.
-const CACHE = 'maomao-v6';
+const CACHE = 'maomao-v7';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
   './cat_model.js',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
