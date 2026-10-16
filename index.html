@@ -161,7 +161,7 @@ textarea.text-in{width:100%;box-sizing:border-box;min-height:100px;resize:vertic
 .sheet-head h2{margin:0;font-family:var(--display);font-weight:400;font-size:26px;line-height:1.1}
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .tag{font-size:12px;padding:2px 8px;border-radius:99px;background:var(--panel-2);border:2px solid var(--line);color:var(--ink-soft)}
-.close{margin-left:auto;width:42px;height:42px;font-size:24px;border-radius:50%;padding:0;flex:none}
+.close{margin-left:auto;width:48px;height:48px;font-size:26px;border-radius:50%;padding:0;flex:none}
 .bars{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;margin:14px 0 10px;font-size:14px}
 .bar{height:14px;border-radius:99px;background:#EFE6D6;border:2px solid var(--ink);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:99px;transition:width .4s}
@@ -1447,7 +1447,7 @@ function mergeStatic(){
 function mergeLocal(group){
   const byMat = new Map(), keep = [];
   group.children.slice().forEach(m=>{
-    if(!m.isMesh || m.userData.noMerge){ keep.push(m); return; }
+    if(!m.isMesh || m.isSkinnedMesh || m.userData.noMerge || m.material.map || m.material.transparent || Array.isArray(m.material)){ keep.push(m); return; }
     m.updateMatrix(); const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()); g.applyMatrix4(m.matrix);
     const k = m.material.uuid + (m.castShadow ? 's' : '');
     if(!byMat.has(k)) byMat.set(k, {mat:m.material, cast:m.castShadow, geos:[]}); byMat.get(k).geos.push(g); group.remove(m);
@@ -2050,7 +2050,7 @@ function buildHumanChar(look, acc, outfit, opts){
   if(O==='dino') [[.66,-.05],[.5,-.42],[.18,-.64]].forEach(([y,z])=>{ const c = mesh(G.cone(.1,.24,6), M('#FFC94D'), 0,y,z); c.rotation.x = -Math.atan2(z,y)*.9; head.add(c); });
   const accSlot = new T.Group(); head.add(accSlot); accSlot.add(buildAcc(acc));
   // invisible hit volume
-  const hit = new T.Mesh(G.cyl(.8,.8,2.5,8), new T.MeshBasicMaterial({transparent:true, opacity:0, depthWrite:false})); hit.position.y = 1.25; root.add(hit);
+  const hit = new T.Mesh(G.cyl(.8,.8,2.5,8), new T.MeshBasicMaterial({visible:false})); hit.position.y = 1.25; root.add(hit);
   root.traverse(o=>{ if(o.isMesh && o!==hit) o.castShadow = false; });
   root.add(blobShadow(.55));
   return flattenChar({root, rig, head, arms, legs, mouth, eyes, accSlot, hit, labelY:2.72, bubbleY:3.55});
@@ -2061,7 +2061,7 @@ let boxes = [];
 function placeBoxes(){
   boxes.forEach(b=>{ scene.remove(b.g); if(b.cat){ const c = b.cat; b.cat = null; if(c.state==='box') leaveBox(c); } }); boxes = [];
   if(!S.boxes || S.boxes.day !== S.day){ const list = []; for(let i=0, n = ri(2,4); i<n; i++){ const v = randomSpot(); list.push([+v.x.toFixed(2), +v.z.toFixed(2), +rand(0,6.28).toFixed(2)]); } S.boxes = {day:S.day, list}; }
-  S.boxes.list.forEach(([x, z, ry])=>{ const g = buildCardboardBox(1.55); g.position.set(x, 0, z); g.rotation.y = ry || 0; g.traverse(o=>{ if(o.isMesh) o.castShadow = true; }); scene.add(g); boxes.push({g, x, z, cat:null}); });
+  S.boxes.list.forEach(([x, z, ry])=>{ const g = buildCardboardBox(1.55); g.position.set(x, 0, z); g.rotation.y = ry || 0; g.traverse(o=>{ if(o.isMesh) o.castShadow = true; }); const gs = []; g.traverse(o=>{ if(o.isGroup) gs.push(o); }); gs.forEach(mergeLocal); scene.add(g); boxes.push({g, x, z, cat:null}); });
 }
 function boxGoal(r){
   if(r.d.isPlayer || (r.d.kid && kidAge(r.d) < 1)) return false;
@@ -2174,7 +2174,7 @@ function buildCatChar(look, acc, outfit, opts){
   catCostume(c, head, outfit || 'tee');
   // costume: a little collar with a bell on every cat, the outfit's colour if it has one
   const top = (hs.c.y + hs.r*1.45)/1;
-  const hit = new T.Mesh(G.cyl(.75,.75,top+.2,8), new T.MeshBasicMaterial({transparent:true, opacity:0, depthWrite:false})); hit.position.y = (top+.2)/2; root.add(hit);
+  const hit = new T.Mesh(G.cyl(.75,.75,top+.2,8), new T.MeshBasicMaterial({visible:false})); hit.position.y = (top+.2)/2; root.add(hit);
   root.add(blobShadow(.55*(L.size||1)));
   return {root, rig, head, arms, legs, mouth, eyes:[], accSlot, hit, cat:c, isCat:true, kitten, top, headY:hs.c.y, labelY:top + .32, bubbleY:top + 1.05};
 }
@@ -2188,7 +2188,7 @@ function catAnchor(c, bone, pos, rot, sc){
 }
 function catCostume(c, H, O){
   const CM = (col, o)=>new T.MeshToonMaterial(Object.assign({color:col, gradientMap:GRAD}, o||{}));
-  const cm = (g, m, x=0, y=0, z=0)=>{ const o = new T.Mesh(g, m); o.position.set(x,y,z); o.castShadow = true; return o; };
+  const cm = (g, m, x=0, y=0, z=0)=>{ const o = new T.Mesh(g, m); o.position.set(x,y,z); return o; };
   const NECK = [0, 1.85, 1.15], NECK_R = [Math.PI/2 - .9, 0, 0], NR = .8, CHIN = [0, 1.42, 1.98];
   const neck = ()=>catAnchor(c, 'neck', NECK, NECK_R);
   const ring = (col, tube)=>{ const n = neck(); n.add(cm(new T.TorusGeometry(NR, tube, 8, 30), CM(col))); return n; };
@@ -2429,7 +2429,7 @@ for(let i=0;i<7;i++){
   const c = new T.Group(); const n = 3+Math.floor(Math.random()*3);
   for(let j=0;j<n;j++){ const p = mesh(G.sph(rand(1.2,2.2),12,8), M('#FFFFFF'), j*1.6-n*.8, rand(-.3,.4), rand(-.6,.6), false); c.add(p); }
   const a = rand(0,6.28), r = rand(25,55); c.position.set(Math.cos(a)*r, rand(16,24), Math.sin(a)*r); c.userData = {a, r, sp:rand(.008,.02)};
-  scene.add(c); clouds.push(c);
+  mergeLocal(c); scene.add(c); clouds.push(c);
 }
 const starGeo = new T.BufferGeometry(); const sp = [];
 for(let i=0;i<400;i++){ const th = Math.random()*Math.PI*2, ph = Math.random()*Math.PI*.42; sp.push(Math.sin(ph)*Math.cos(th)*180, Math.cos(ph)*180, Math.sin(ph)*Math.sin(th)*180); }
@@ -5646,7 +5646,7 @@ canvas.addEventListener('wheel', e=>{ e.preventDefault(); if(mode==='island'){ c
 
 const ray = new T.Raycaster(), ndc = new T.Vector2();
 function onTap(x, y){
-  if(pm.on) return;
+  if(pm.on || performance.now() - uiCloseT < 450 || $('#modalRoot').children.length) return;
   ndc.set(x/innerWidth*2-1, -(y/innerHeight)*2+1);
   if(mode==='room'){ roomTap(); return; }
   ray.setFromCamera(ndc, camera);
@@ -5685,7 +5685,7 @@ function select(r){
   $('#dock').hidden = true; renderSheet();
 }
 function releaseSelected(){ const r = selected; selected = null; if(r && r.state==='idle') r.timer = rand(.5,1.5); }
-function closeSheet(){ releaseSelected(); chooser = null; $('#sheet').hidden = true; if(mode==='island') $('#dock').hidden = false; }
+function closeSheet(){ uiCloseT = performance.now(); releaseSelected(); chooser = null; $('#sheet').hidden = true; if(mode==='island') $('#dock').hidden = false; }
 function hairDot(d){ return d.look.cat ? `style="background:#FFF6E6 url(${portrait(d)}) center/cover;--hair:transparent"` : `style="background:${d.look.skin};--hair:${d.look.hairColor}"`; }
 function renderSheet(){
   const r = selected; if(!r) return; const d = r.d, el = $('#sheet');
@@ -5725,8 +5725,8 @@ function renderSheet(){
   el.innerHTML = `
     <div class="sheet-head">
       <div class="face-dot" ${hairDot(d)}></div>
-      <div><h2>${esc(d.name)}</h2><div class="tags"><span class="tag">${gOf(r)==='f' ? '♀ 母猫' : '♂ 公猫'}</span><span class="tag">${persName(d)}</span>${jobOf(d) ? `<button class="tag tagbtn" data-act="job">${jobOf(d).e} ${jobOf(d).n}</button>` : ''}<span class="tag">${d.level} 级</span><span class="tag">🎂 ${bdayText(d)}</span>${!d.kid && d.age ? `<span class="tag">${d.age >= 60 ? '👴' : '🐈'} ${d.age}岁${d.retired ? ' · 退休晒太阳' : ''}</span>` : ''}${schoolAge(d) && d.grade ? `<span class="tag">📝 ${d.grade}分</span>` : ''}${d.nick?`<span class="tag">外号「${esc(d.nick)}」</span>`:''}<span class="tag">最爱 ${FOODS[d.fav].e}</span><span class="tag">不爱 ${FOODS[d.dislike].e}</span>${residents.length>1?`<button class="tag tagbtn" data-act="rel">💞 关系图</button>`:''}${pt?`<span class="tag">${d.pType==='spouse'?'💍 夫妻':'💑 恋人'} ${esc(pt.d.name)}</span>`:''}${d.kid?`<span class="tag">🍼 ${kidTag(d)}</span>`:''}${pets.filter(pw=>pw.d.owner===d.id).map(pw=>`<span class="tag">${PET_KINDS[pw.d.kind].e} ${esc(pw.d.name)}</span>`).join('')}</div></div>
-      <button class="toy close" data-share="1" aria-label="分享猫咪" title="分享猫咪" style="margin-right:6px">🔗</button><button class="toy close" data-close="1" aria-label="关闭">×</button>
+      <div><h2>${esc(d.name)}</h2><div class="tags"><span class="tag">${gOf(r)==='f' ? '♀ 母猫' : '♂ 公猫'}</span><span class="tag">${persName(d)}</span>${jobOf(d) ? `<button class="tag tagbtn" data-act="job">${jobOf(d).e} ${jobOf(d).n}</button>` : ''}<span class="tag">${d.level} 级</span><span class="tag">🎂 ${bdayText(d)}</span>${!d.kid && d.age ? `<span class="tag">${d.age >= 60 ? '👴' : '🐈'} ${d.age}岁${d.retired ? ' · 退休晒太阳' : ''}</span>` : ''}${schoolAge(d) && d.grade ? `<span class="tag">📝 ${d.grade}分</span>` : ''}${d.nick?`<span class="tag">外号「${esc(d.nick)}」</span>`:''}<span class="tag">最爱 ${FOODS[d.fav].e}</span><span class="tag">不爱 ${FOODS[d.dislike].e}</span>${residents.length>1?`<button class="tag tagbtn" data-act="rel">💞 关系图</button>`:''}<button class="tag tagbtn" data-share="1">🔗 分享</button>${pt?`<span class="tag">${d.pType==='spouse'?'💍 夫妻':'💑 恋人'} ${esc(pt.d.name)}</span>`:''}${d.kid?`<span class="tag">🍼 ${kidTag(d)}</span>`:''}${pets.filter(pw=>pw.d.owner===d.id).map(pw=>`<span class="tag">${PET_KINDS[pw.d.kind].e} ${esc(pw.d.name)}</span>`).join('')}</div></div>
+      <button class="toy close" data-close="1" aria-label="关闭">×</button>
     </div>
     <div class="bars">
       <span>心情</span><div class="bar mood"><i id="bMood"></i></div><span class="num" id="nMood"></span>
@@ -5891,7 +5891,8 @@ function openModal(html, onClick){
   bg.addEventListener('click', e=>{ if(e.target===bg){ closeModal(); return; } const b = e.target.closest('button'); if(b){ if(b.dataset.close){ closeModal(); return; } onClick && onClick(b, e); } });
   bg.addEventListener('input', e=>onClick && onClick(null, e));
 }
-function closeModal(){ makingPlayer = false; stopGame(); $('#modalRoot').innerHTML = ''; editorOpen = false; editing = null; }
+let uiCloseT = 0;
+function closeModal(){ uiCloseT = performance.now(); makingPlayer = false; stopGame(); $('#modalRoot').innerHTML = ''; editorOpen = false; editing = null; }
 
 let shopTab = 'food';
 
@@ -6494,7 +6495,7 @@ function buildPet(pd){
   // collar with a little bell
   if(!bird){ const cl = new T.Mesh(new T.TorusGeometry(headR*.78,.028,8,24), M(pd.collar)); cl.position.set(0, headY - headR*.78, headZ - .06); cl.rotation.x = Math.PI/2 - .35; rig.add(cl); rig.add(mesh(G.sph(.04,10,8), M('#FFD23F'), 0, headY - headR*.95, headZ + headR*.62)); }
   else { const cl = new T.Mesh(new T.TorusGeometry(.14,.022,8,20), M(pd.collar)); cl.position.set(0,.6,.08); cl.rotation.x = Math.PI/2; rig.add(cl); }
-  const hit = new T.Mesh(G.cyl(.55,.55,1.1,8), new T.MeshBasicMaterial({transparent:true, opacity:0, depthWrite:false})); hit.position.y = .5; root.add(hit);
+  const hit = new T.Mesh(G.cyl(.55,.55,1.1,8), new T.MeshBasicMaterial({visible:false})); hit.position.y = .5; root.add(hit);
   root.traverse(o=>{ if(o.isMesh && o!==hit) o.castShadow = false; });
   const sc = .8 + (pd.size ?? 4)*.05; rig.scale.setScalar(sc); root.add(blobShadow(.42*sc));
   return {root, rig, head, tail:tailG, legs, hit};
@@ -6647,10 +6648,14 @@ function adaptRes(real){
   const avg = prSum/prN; prT = prSum = prN = 0;
   let to = prNow; if(avg > 1/40 && prNow > .75) to = Math.max(.75, prNow - .25); else if(avg < 1/55 && prNow < PR_MAX) to = Math.min(PR_MAX, prNow + .25);
   if(to !== prNow){ prNow = to; renderer.setPixelRatio(prNow); onResize(); }
+  shadowSlow = prNow < 1 && avg > 1/40;
 }
+// on a struggling device the shadows are redrawn every third frame instead of every frame
+let shadowSlow = false, shadowN = 0;
 function loop(){
   requestAnimationFrame(loop);
   const real = clock.getDelta(); adaptRes(real);
+  renderer.shadowMap.autoUpdate = !shadowSlow || (++shadowN % 3 === 0);
   loopStep(Math.min(real, .05));
 }
 // draw every cat's portrait a little at a time while nothing is happening, so the first tap on a cat doesn't stall
@@ -6743,6 +6748,7 @@ if(!S.pets) S.pets = [];
 S.pets = []; // no pet system: the cats are the pets
 applyIsland(true);
 placeBoxes();
+Object.entries(LOC_G).forEach(([k, g])=>{ if(k!=='camp') mergeLocal(g); });
 if(!S.weather || S.weather.day !== S.day) S.weather = {day:S.day, kind:pickWeather()};
 residents.forEach(r=>{ if(!r.d.kid && !r.d.isPlayer && !r.d.job) r.d.job = pick(jobsOpen().filter(k=>k!=='none')); });
 applySeason(); buildHolidayDecor(); applyHolidayHats();
@@ -6773,7 +6779,7 @@ function showUpdateBar(){
 }
 checkUpdate(); setInterval(checkUpdate, 3*60*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkUpdate(); });
-if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
+if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, get renderer(){ return renderer; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
 setTimeout(()=>toast('点一点小猫，看看它们想要什么吧！'), 600);
 setTimeout(()=>toast('点猫屋可以进窝里布置哦'), 3800);
 setTimeout(()=>toast('猫咪们会交朋友、哈气吵架、谈恋爱……多留意它们的心愿 💘'), 7000);
