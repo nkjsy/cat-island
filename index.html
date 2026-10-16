@@ -415,7 +415,7 @@ const DREAMS = [
   '梦见天上下起了{food}雨，赶紧张大嘴巴接着吃。',
   '梦见钻进一个超级大的纸箱，里面是一整片云朵，睡了好香的午觉。'
 ];
-const SOCIAL = ['love','propose','makeup'];
+const SOCIAL = ['love','propose','makeup','nest'];
 const HANDS = [{e:'✊',n:'石头'},{e:'✌️',n:'剪刀'},{e:'🖐️',n:'布'}]; // i beats (i+1)%3
 const OUTFITS = {
   tee:{n:'铃铛项圈',e:'🔔',p:0}, hoodie:{n:'小披风',e:'🦸',p:80}, dress:{n:'花边围兜',e:'🎀',p:90}, overalls:{n:'牛仔领巾',e:'🧣',p:90},
@@ -2543,6 +2543,7 @@ function wantEmoji(w){
   if(w.type==='friend') return '👫';
   if(w.type==='gift') return (GIFT_ITEMS[w.item]||GIFT_ITEMS.leaf).e;
   if(w.type==='box') return '📦';
+  if(w.type==='nest') return '🍼';
   if(w.type==='brush') return '🪮';
   if(w.type==='gift') return `叼来了${(GIFT_ITEMS[w.item]||GIFT_ITEMS.leaf).n}，要送给你！`;
   if(w.type==='box') return '想钻进纸箱里待一会儿';
@@ -2579,6 +2580,7 @@ function wantText(r){
   const o = w.with && byId(w.with); const on = o ? o.d.name : 'TA';
   if(w.type==='love') return `偷偷喜欢上了${on}，想去蹭蹭${on}……帮帮忙吧！`;
   if(w.type==='propose') return `想向${on}求婚！`;
+  if(w.type==='nest') return `想和${on}要小猫了……想要一个软软的纸箱做窝`;
   if(w.type==='makeup') return `和${on}互相哈气了，其实想和好……`;
   return '';
 }
@@ -2866,7 +2868,7 @@ function needsTick(r, secs){
   const d = r.d;
   if(r.state==='away') return;
   if(d.isPlayer){ if(!(d.want && d.want.type==='bday')) d.want = null; d.full = Math.max(d.full, 70); d.mood = Math.max(d.mood, 70); return; }
-  if(d.want && d.want.with){ const o = byId(d.want.with); if(!o || (d.want.type==='love' && !canRomance(r,o)) || (d.want.type==='propose' && d.partner!==o.d.id)) d.want = null; }
+  if(d.want && d.want.with){ const o = byId(d.want.with); if(!o || (d.want.type==='love' && !canRomance(r,o)) || (d.want.type==='propose' && d.partner!==o.d.id) || (d.want.type==='nest' && (d.partner!==o.d.id || d.pType!=='spouse'))) d.want = null; }
   if(r.state==='home'){ d.full = clamp(d.full - secs*.08, 0, 100); return; }
   d.full = clamp(d.full - secs*.3, 0, 100);
   const target = d.full < 25 ? 25 : (d.want ? 50 : 70);
@@ -3048,6 +3050,41 @@ function catChild(A, B, g){
   return L;
 }
 function breedLabel(L){ return L.mix ? L.mix.join(' × ') : (CAT_BREEDS[L.breed] || CAT_BREEDS.orange).name; }
+function canNest(a, b){ return (a.d.litters||0) < MAX_KIDS && residents.filter(x=>!x.d.isPlayer).length < MAX_CATS && freeSlots().length > 0 && (a.d.age||30) < 46 && (b.d.age||30) < 46 && a.state!=='away' && b.state!=='away'; }
+function giveNest(r){
+  const d = r.d, pt = d.want && byId(d.want.with);
+  if(!pt || !canNest(r, pt)){ d.want = null; toast('小岛住满啦，暂时没地方给小猫住了'); renderSheet(); return; }
+  if(S.coins < 30){ toast('金币不够 30 个'); return; }
+  addCoins(-30); fulfil(r, 0); closeSheet();
+  const kid = haveBaby(r, pt);
+  if(kid){ toast(`📦 ${d.name} 抱着纸箱蹭了又蹭，${pt.d.name} 在旁边守着……`, 'pink'); logNews(`🍼 你给 ${d.name} 和 ${pt.d.name} 送了一个软软的纸箱`); }
+  save();
+}
+// a crush or a proposal nobody helped with doesn't hang around forever: after a few days the cat goes on its own
+function romanceOnTheirOwn(extra){
+  residents.forEach(r=>{
+    const d = r.d, w = d.want; if(!w || !['love','propose'].includes(w.type) || r.state==='away') return;
+    if(w.since == null){ w.since = S.day; return; }
+    if(S.day - w.since < 5) return;
+    const o = byId(w.with); d.want = null; if(!o || o.state==='away') return;
+    const fv = d.friends[o.d.id]||0;
+    if(w.type==='love'){
+      if(!canRomance(r, o)) return;
+      if(Math.random() < clamp(.25 + (fv-60)/80, .15, .7)){
+        d.partner = o.d.id; o.d.partner = d.id; d.pType = o.d.pType = 'lover'; d.pSince = o.d.pSince = S.day; addFriend(r, o, 8);
+        if(o.d.want && o.d.want.type==='love' && o.d.want.with===d.id) o.d.want = null;
+        extra.push(`💑 等了好几天，${d.name} 自己叼着小花去找 ${o.d.name} 表白，成功了！`);
+      } else {
+        d.noCrush = o.d.id; addFriend(r, o, -10); d.mood = clamp(d.mood-15,0,100);
+        extra.push(`💔 ${d.name} 鼓起勇气自己去向 ${o.d.name} 表白，被婉拒了……要是有人帮帮忙就好了`);
+      }
+    } else if(d.partner===o.d.id && d.pType==='lover'){
+      d.pType = o.d.pType = 'spouse'; d.pSince = o.d.pSince = S.day; addFriend(r, o, 5);
+      S.wedPlan = {a:d.id, b:o.d.id, asked:true};
+      extra.push(`💍 ${d.name} 自己叼着小铃铛向 ${o.d.name} 求婚，成功了！婚礼还没办，点它们俩就能筹备`);
+    }
+  });
+}
 function haveBaby(a, b){
   a.d.lastBaby = b.d.lastBaby = S.day;
   const free = freeSlots(), room = MAX_CATS - residents.filter(r=>!r.d.isPlayer).length;
@@ -3058,7 +3095,7 @@ function haveBaby(a, b){
   const usedNames = new Set(residents.map(r=>r.d.name)), kids = [];
   for(let i=0;i<n;i++){
     const kg = Math.random() < .5 ? 'f' : 'm', look = catChild(mom.d.look, dad.d.look, kg);
-    const nm = pick(CAT_NAMES.filter(x=>!usedNames.has(x)).concat(['小宝'+(i+1)])); usedNames.add(nm);
+    const left = CAT_NAMES.filter(x=>!usedNames.has(x)), nm = left.length ? pick(left) : '小宝'+(i+1); usedNames.add(nm);
     const T0 = a.d.traits || traitsFor(a.d.pers), T1 = b.d.traits || traitsFor(b.d.pers), tr = {};
     TRAIT_AXES.forEach(([k])=>tr[k] = clamp(Math.round((T0[k] + T1[k])/2 + rand(-1.5,1.5)), 0, 8));
     const d = makeResData(nm, look, persFromTraits(tr), free[i]); d.traits = tr;
@@ -4145,7 +4182,7 @@ function ownerBirthday(me, extra){
 }
 let inviteFrom = null;
 function maybeInvite(){
-  const me = playerRes(); if(!me || isNight() || inviteFrom || ev || show || birth || mode!=='island' || $('#modalRoot').children.length) return;
+  const me = playerRes(); if(!me || isNight() || inviteFrom || ev || show || birth || selected || mode!=='island' || $('#modalRoot').children.length) return;
   const pool = residents.filter(r=>r!==me && r.p.root.visible && !inEvent(r) && (r.d.friends[me.d.id]||0) >= 30);
   if(!pool.length || Math.random() > .5) return;
   const r = pick(pool); inviteFrom = r;
@@ -5666,6 +5703,7 @@ function morning(){
   S.news = {day:S.day-1, items:(S.log||[]).slice()}; S.log = [];
   const extra = [];
   residents.forEach(r=>{ const w = r.d.want; if(w && w.type==='makeup' && w.since!=null && S.day - w.since >= 5){ const o = byId(w.with); r.d.want = null; if(o && o.d.want && o.d.want.type==='makeup' && o.d.want.with===r.d.id){ o.d.want = null; extra.push(`🤝 ${r.d.name} 和 ${o.d.name} 过了好几天，终于又互相舔毛，和好了`); } } });
+  romanceOnTheirOwn(extra);
   residents.forEach(r=>{ if(r.d.kid){ const before = kidStage(Object.assign({}, r.d, {bornDay:r.d.bornDay+1})); if(r.p.isCat && r.p.kitten !== catKitten(r.d)) rebuildChar(r); r.p.root.scale.setScalar(kidScale(r.d)); const now = kidStage(r.d); if(now !== before && S.day - r.d.bornDay < KID_DAYS) extra.push(`🌱 ${r.d.name} ${Math.floor(kidAge(r.d))} 岁了，成了${now}`); } });
   residents.forEach(r=>{ if(r.d.kid && S.day - r.d.bornDay >= KID_DAYS){ r.d.kid = false; r.d.age = ADULT_AGE; r.p.root.scale.setScalar(kidScale(r.d)); r.d.job = pick(jobsOpen().filter(k=>k!=='none')); giveDream(r.d); addCoins(50); extra.push(`🎓 ${r.d.name} 满 1 岁，从猫咪学校毕业啦，成了大猫，当上了${JOBS[r.d.job].n}！`); } });
   const seen = new Set();
@@ -5678,6 +5716,9 @@ function morning(){
     } else if(r.d.pType==='spouse' && S.day - r.d.pSince >= 10 && S.day - (r.d.lastBaby ?? -99) >= 20 && (r.d.litters||0) < MAX_KIDS && residents.filter(x=>!x.d.isPlayer).length < MAX_CATS && (r.d.age||30) < 46 && (pt.d.age||30) < 46 && r.state!=='away' && pt.state!=='away' && Math.random() < .12){
       const kid = haveBaby(r, pt);
       extra.push(kid ? `🐾 ${r.d.name} 和 ${pt.d.name} 家要添小猫啦！` : `📦 ${r.d.name} 和 ${pt.d.name} 想要小猫，可是小岛住满啦`);
+    } else if(r.d.pType==='spouse' && S.day - r.d.pSince >= 3 && S.day - (r.d.lastBaby ?? -99) >= 12 && canNest(r, pt) && Math.random() < .35){
+      const mom = gOf(r)==='f' ? r : pt;
+      if(!mom.d.want || !hasSocialWant(mom)){ mom.d.want = {type:'nest', with:(mom===r ? pt : r).d.id}; extra.push(`🍼 ${mom.d.name} 最近总往纸箱里钻，好像在给小猫做窝……点${ta(mom.d)}送个软软的纸箱吧`); }
     }
   });
   const tip = DAY_TIPS[S.day]; if(tip) toastLater('💡 ' + tip, 3200);
@@ -5834,6 +5875,7 @@ function toast(msg, kind){
 let chooser = null; // 'feed' | 'gift' | 'intro'
 function select(r){
   if(inEvent(r)){ toast(`${r.d.name} 正在忙一件大事！`); return; }
+  if(inviteFrom){ inviteFrom = null; $('#inviteCard').hidden = true; }
   sfx.pop(); r.say = talk(r); task('talk', r.d.id); fortuneTap(r);
   if(selected && selected !== r) releaseSelected();
   if(!selected && cam.dist > 16){ cam.prevDist = cam.dist; cam.distGoal = innerWidth < 600 ? 15 : 16; }
@@ -5876,6 +5918,7 @@ function renderSheet(){
   if(w && w.type==='sleep') wantActs = `<div class="want-acts"><button class="toy pill-btn" data-sleep="1">😪 帮${ta(d)}想办法</button></div>`;
   if(w && w.type==='ask') wantActs = `<div class="want-acts"><button class="toy pill-btn" data-act="ask">❓ 陪${ta(d)}聊聊</button></div>`;
   const lvBox = d.lvPending ? `<div class="lvbox"><b>⭐ 升到 ${d.level} 级啦！想要哪个奖励？</b>${chooser==='lvcatch' ? `<div class="name-row" style="margin-top:8px"><input class="text-in" id="lvCatch" maxlength="5" value="${esc(d.catch)}"><button class="toy pill-btn hot" data-lvok="1">就用这个</button></div>` : `<div class="want-acts">${LV_REWARDS.map(([k,n])=>`<button class="toy pill-btn" data-lv="${k}">${n}</button>`).join('')}</div>`}</div>` : '';
+  if(w && wo && w.type==='nest') wantActs = `<div class="want-acts"><button class="toy pill-btn hot" data-nest="1">📦 送一个软软的纸箱（30 金币）</button></div>`;
   if(w && wo && w.type==='makeup') wantActs = `<div class="want-acts"><button class="toy pill-btn" data-makeup="1">🤝 帮它们和好</button></div>`;
   if(r.state==='moon' && gatherNow()) wantActs += S.moonJoin===S.day ? `<div class="want-acts"><span>🌕 你已经陪大家看过月亮啦</span></div>` : `<div class="want-acts"><button class="toy pill-btn hot" data-moonjoin="1">🌕 陪大家看月亮</button></div>`;
   wantActs += extraActs(r);
@@ -5940,6 +5983,7 @@ $('#sheet').addEventListener('click', e=>{
   if(b.dataset.go){ closeSheet(); if(b.dataset.go==='shop') openShop('food'); else if(b.dataset.go==='shop-acc') openShop('acc'); else if(b.dataset.go==='shop-cloth') openShop('cloth'); else if(b.dataset.go==='kitchen') openKitchen(); else openEditor(); return; }
   if(b.dataset.party){ sfx.pop(); remember(r, 'party'); startParty(r); return; }
   if(b.dataset.moonjoin){ moonJoin(); return; }
+  if(b.dataset.nest){ giveNest(r); return; }
   if(b.dataset.mg){ if(r.state==='home'){ toast(`${d.name} 在打呼噜，明天再玩吧`); return; } openMiniGame(r, b.dataset.mg); return; }
   if(b.dataset.sleep){ if(d.want && d.want.tried===S.day){ toast(`今天已经试过一个办法了，明天再看看效果吧`); return; } openSleepFix(r); return; }
   if(b.dataset.job){ d.job = b.dataset.job; chooser = null; sfx.happy(); toast(`${d.name} 成了${JOBS[d.job].n}！`); logNews(`💼 ${d.name} 换了差事，现在是${JOBS[d.job].n}`); save(); renderSheet(); return; }
