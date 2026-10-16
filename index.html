@@ -252,6 +252,7 @@ textarea.text-in{width:100%;box-sizing:border-box;min-height:100px;resize:vertic
 .big-go{width:100%;padding:12px;font-size:22px;background:var(--coral);color:#fff;margin-top:6px}
 
 @media (max-width:440px){.hud-right{gap:6px}.icon-btn{width:40px;height:40px;font-size:18px}.coins{font-size:18px;padding:5px 10px}.brand{padding:5px 10px 6px}.brand h1{font-size:21px}.brand .clock{font-size:12px}}
+@media (max-width:440px){#hud{padding:10px 10px;gap:6px}.hud-right{gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:62vw}.icon-btn{width:36px;height:36px;font-size:16px}.coins{font-size:16px;padding:4px 8px}.brand h1{font-size:18px;white-space:nowrap}.brand{min-width:0}}
 /* voice / rps / photos */
 .voice-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:14px}
 .voice-row label{display:flex;align-items:center;gap:6px}
@@ -5612,19 +5613,61 @@ function updateFireworks(dt){
 
 /* ---------------- camera ---------------- */
 const cam = {yaw:.6, pitch:.7, dist:25, target:new T.Vector3(0,0,0), goal:new T.Vector3(0,0,0)};
+// while a cat's panel is open the picture slides up, so the cat sits in the clear space above the panel
+let viewShift = 0;
 function placeCamera(){
+  const sh = $('#sheet'), want = selected && !sh.hidden && mode==='island' ? Math.min(sh.offsetHeight, innerHeight*.6) * .5 : 0;
+  viewShift += (want - viewShift) * .15; if(Math.abs(want - viewShift) < .5) viewShift = want;
+  if(viewShift > .5) camera.setViewOffset(innerWidth, innerHeight, 0, viewShift, innerWidth, innerHeight); else if(camera.view && camera.view.enabled) camera.clearViewOffset();
   camera.position.set(cam.target.x + Math.sin(cam.yaw)*Math.cos(cam.pitch)*cam.dist, cam.target.y + Math.sin(cam.pitch)*cam.dist, cam.target.z + Math.cos(cam.yaw)*Math.cos(cam.pitch)*cam.dist);
   camera.lookAt(cam.target.x, cam.target.y+1, cam.target.z);
 }
 const pointers = new Map(); let dragMoved = false, pinchD = 0, downAt = null;
+/* ---------------- stroking: drag a finger over the chosen cat ---------------- */
+let stroke = null;
+function catPartAt(r, x, y){
+  ndc.set(x/innerWidth*2-1, -(y/innerHeight)*2+1); ray.setFromCamera(ndc, camera);
+  const h = ray.intersectObject(r.p.hit, false)[0]; if(!h) return null;
+  const lp = r.p.root.worldToLocal(h.point.clone()), k = lp.y / (r.p.top || 2);
+  return k > .62 ? 'head' : k > .38 ? 'back' : 'belly';
+}
+function strokeStart(e){
+  if(mode!=='island' || !selected || !selected.p.isCat || selected.state==='home' || inEvent(selected)) return false;
+  const part = catPartAt(selected, e.clientX, e.clientY); if(!part) return false;
+  const r = selected; stroke = {r, n:0, good:0, dist:0, last:{x:e.clientX, y:e.clientY}, part, src:null, g:null};
+  r.state = 'idle'; r.timer = 4; r.dest = null; r.target = null;
+  const c = ac(); if(c && soundOn){ loadSnd(c); const pc = pickClip('purr'); if(pc && sndBuf[pc]){ const src = c.createBufferSource(), g = c.createGain(); src.buffer = sndBuf[pc]; src.loop = true; src.loopStart = .06; src.loopEnd = sndBuf[pc].duration - .06; g.gain.value = 0; src.connect(g); g.connect(audioOut || c.destination); src.start(); stroke.src = src; stroke.g = g; } }
+  return true;
+}
+function strokeMove(e){
+  const st = stroke, r = st.r, d = r.d; st.dist += Math.hypot(e.clientX - st.last.x, e.clientY - st.last.y); st.last = {x:e.clientX, y:e.clientY};
+  const part = catPartAt(r, e.clientX, e.clientY) || st.part; st.part = part;
+  if(st.dist < 55) return; st.dist = 0; st.n++;
+  r.state = 'idle'; r.timer = 4; r.happyT = Math.max(r.happyT || 0, .8);
+  const proud = d.traits ? d.traits.talk : 4;
+  if(part==='belly' && (proud >= 5 ? Math.random() < .5 : Math.random() < .12)){
+    strokeEnd(true); bondUp(r, -2); r.angryT = 1.6; d.mood = clamp(d.mood - 3, 0, 100); speakWith(d.voice, '哈——！', 'angry');
+    r.say = pick(['肚子不许摸！','哼，那里不行','喵嗷！手拿开']) + '，' + d.catch; toast(`😾 ${d.name} 被摸到肚子，挠了你一下！`); renderSheet(); return;
+  }
+  st.good++; r.happyClip = 'pet'; beHappy(r, part==='head' ? '💕' : '💖', 1.2);
+  if(st.n % 2 === 0) burst(scene, r.p.root.position.clone().setY((r.p.top || 2) * .8), pick(['💗','💕','✨']), 2, .5);
+  if(st.g){ const c = actx; st.g.gain.cancelScheduledValues(c.currentTime); st.g.gain.linearRampToValueAtTime(Math.min(1.4, .25 + st.good*.12), c.currentTime + .25); }
+  if(st.good === 6){ S.stroked = true; patCat(r, true); if(!(r.angryT > 0)) r.say = pick(part==='head' ? ['耳朵后面最舒服了','咕噜咕噜……就是那里','再挠挠下巴嘛'] : ['背上好舒服～','咕噜……你手法真好','尾巴根也要']) + '，' + d.catch; renderSheet(); }
+}
+function strokeEnd(quick){
+  const st = stroke; stroke = null; if(!st) return;
+  if(st.g){ const c = actx; st.g.gain.cancelScheduledValues(c.currentTime); st.g.gain.setValueAtTime(st.g.gain.value, c.currentTime); st.g.gain.linearRampToValueAtTime(0, c.currentTime + (quick ? .15 : .8)); st.src.stop(c.currentTime + 1); }
+}
 canvas.addEventListener('pointerdown', e=>{
   ac(); canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(pointers.size===1 && strokeStart(e)){ dragMoved = true; downAt = null; return; }
   if(pointers.size===1){ dragMoved = false; downAt = {x:e.clientX, y:e.clientY}; }
   if(pointers.size===2){ const [a,b] = [...pointers.values()]; pinchD = Math.hypot(a.x-b.x, a.y-b.y); dragMoved = true; }
 });
 canvas.addEventListener('pointermove', e=>{
   const prev = pointers.get(e.pointerId); if(!prev) return;
   const cur = {x:e.clientX, y:e.clientY}; pointers.set(e.pointerId, cur);
+  if(stroke){ if(pointers.size===1) strokeMove(e); else strokeEnd(true); return; }
   if(pointers.size===1){
     if(downAt && Math.hypot(cur.x-downAt.x, cur.y-downAt.y) > 7) dragMoved = true;
     if(dragMoved && mode==='island'){ cam.yawGoal = null; cam.pitchGoal = null; cam.yaw -= (cur.x-prev.x)*.008; cam.pitch = clamp(cam.pitch + (cur.y-prev.y)*.005, .35, 1.3); }
@@ -5637,11 +5680,12 @@ canvas.addEventListener('pointermove', e=>{
 });
 function endPointer(e){
   if(!pointers.has(e.pointerId)) return;
+  if(stroke){ const st = stroke; strokeEnd(); pointers.delete(e.pointerId); if(st.n === 0) onTap(e.clientX, e.clientY); return; }
   const wasSingle = pointers.size===1; pointers.delete(e.pointerId);
   if(wasSingle && !dragMoved) onTap(e.clientX, e.clientY);
 }
 canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', e=>pointers.delete(e.pointerId));
+canvas.addEventListener('pointercancel', e=>{ pointers.delete(e.pointerId); strokeEnd(true); });
 canvas.addEventListener('wheel', e=>{ e.preventDefault(); if(mode==='island'){ cam.distGoal = null; cam.dist = clamp(cam.dist * (1 + Math.sign(e.deltaY)*.1), 12, camMax()); } }, {passive:false});
 
 const ray = new T.Raycaster(), ndc = new T.Vector2();
@@ -5685,6 +5729,22 @@ function select(r){
   $('#dock').hidden = true; renderSheet();
 }
 function releaseSelected(){ const r = selected; selected = null; if(r && r.state==='idle') r.timer = rand(.5,1.5); }
+function patCat(r, stroked){
+  const d = r.d;
+  if(r.state==='home'){ toast(`${d.name} 在打呼噜，嘘……`); return; }
+  // petting too often in a short while annoys a cat; proud (傲娇) cats may even take a swipe at you
+  const now = S.day*24 + S.hour; d.pets = (d.pets||[]).filter(x=>now - x < 2).concat(now);
+  const proud = (d.traits ? d.traits.talk : 4), limit = proud >= 6 ? 2 : proud >= 3 ? 3 : 4;
+  if(d.pets.length > limit && !(d.want && d.want.type==='pat')){
+    bondUp(r, -3); r.angryT = 1.6; r.state = 'idle'; r.idleClip = null; d.mood = clamp(d.mood - 3, 0, 100); speakWith(d.voice, '哈——！', 'angry');
+    r.say = pick(['哼，摸够了没有','别烦我啦','我要一只猫静静']) + '，' + d.catch;
+    toast(proud >= 6 ? `😾 ${d.name} 被摸烦了，挠了你一下！隔一会儿再摸吧` : `😾 ${d.name} 有点烦了，隔一会儿再摸吧`);
+    renderSheet(); return;
+  }
+  bondUp(r, 3); d.mood = clamp(d.mood + 8, 0, 100); beHappy(r, '💖', 2.2); r.happyClip = 'pet'; if(!stroked) purr(2); r.say = pick(['咕噜咕噜……好舒服','再摸一下嘛','耳朵后面也要','最喜欢你了']) + '，' + d.catch;
+  if(d.want && d.want.type==='pat') fulfil(r, 15);
+  renderSheet(); return;
+}
 function closeSheet(){ uiCloseT = performance.now(); releaseSelected(); chooser = null; $('#sheet').hidden = true; if(mode==='island') $('#dock').hidden = false; }
 function hairDot(d){ return d.look.cat ? `style="background:#FFF6E6 url(${portrait(d)}) center/cover;--hair:transparent"` : `style="background:${d.look.skin};--hair:${d.look.hairColor}"`; }
 function renderSheet(){
@@ -5744,7 +5804,7 @@ function renderSheet(){
       <button class="toy act c2" data-act="ask"><span class="ic">❓</span>聊聊天</button>
       <button class="toy act c1" data-act="edit"><span class="ic">🛁</span>换造型</button>
       <button class="toy act c5" data-act="home"><span class="ic">🏠</span>去${ta(d)}窝里</button>
-    </div>${ch}`;
+    </div>${S.stroked ? '' : '<p class="tip">💡 用手指在猫身上来回滑，就能撸猫。头和背最舒服，摸肚子小心被挠！</p>'}${ch}`;
   el.hidden = false; refreshBars();
   const line = r.say || talk(r); if(line !== r.spoken){ r.spoken = line; speakWith(d.voice, line); }
 }
@@ -5803,21 +5863,7 @@ $('#sheet').addEventListener('click', e=>{
   }
   if(b.dataset.act){
     const a = b.dataset.act; sfx.pop();
-    if(a==='pat'){
-      if(r.state==='home'){ toast(`${d.name} 在打呼噜，嘘……`); return; }
-      // petting too often in a short while annoys a cat; proud (傲娇) cats may even take a swipe at you
-      const now = S.day*24 + S.hour; d.pets = (d.pets||[]).filter(x=>now - x < 2).concat(now);
-      const proud = (d.traits ? d.traits.talk : 4), limit = proud >= 6 ? 2 : proud >= 3 ? 3 : 4;
-      if(d.pets.length > limit && !(d.want && d.want.type==='pat')){
-        bondUp(r, -3); r.angryT = 1.6; r.state = 'idle'; r.idleClip = null; d.mood = clamp(d.mood - 3, 0, 100); speakWith(d.voice, '哈——！', 'angry');
-        r.say = pick(['哼，摸够了没有','别烦我啦','我要一只猫静静']) + '，' + d.catch;
-        toast(proud >= 6 ? `😾 ${d.name} 被摸烦了，挠了你一下！隔一会儿再摸吧` : `😾 ${d.name} 有点烦了，隔一会儿再摸吧`);
-        renderSheet(); return;
-      }
-      bondUp(r, 3); d.mood = clamp(d.mood + 8, 0, 100); beHappy(r, '💖', 2.2); r.happyClip = 'pet'; purr(2); r.say = pick(['咕噜咕噜……好舒服','再摸一下嘛','耳朵后面也要','最喜欢你了']) + '，' + d.catch;
-      if(d.want && d.want.type==='pat') fulfil(r, 15);
-      renderSheet(); return;
-    }
+    if(a==='pat'){ patCat(r); return; }
     if(a==='home'){ enterRoom(r); return; }
     if(a==='rel'){ openRelChart(r); return; }
     if(a==='job' && d.kid){ toast(kidAge(d) >= 6 ? `${d.name} 还在猫咪学校上学呢` : `${d.name} 还是小奶猫啦`); return; }
@@ -6779,7 +6825,7 @@ function showUpdateBar(){
 }
 checkUpdate(); setInterval(checkUpdate, 3*60*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkUpdate(); });
-if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, get renderer(){ return renderer; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
+if(/[?&]debug\b/.test(location.search)) window.__isle = {buildChar, get renderer(){ return renderer; }, get camera(){ return camera; }, get scene(){ return scene; }, catSay, purr, get sndBuf(){ return sndBuf; }, get BGM(){ return BGM; }, get bgmNow(){ return bgmNow; }, enterRoom, get roomWalk(){ return roomWalk; }, get roomChar(){ return roomChar; }, morning, placeBoxes, enterBox, boxGoal, giftsMorning, bondUp, get boxes(){ return boxes; }, newCatLook, select, portrait, openEditor, haveBaby: (a,b)=>haveBaby(a,b), get S(){ return S; }, get residents(){ return residents; }, get ev(){ return ev; }, get show(){ return show; }, get visitor(){ return visitor; }, quarrel, rebuildChar, cam, loopStep, openFishing, openBugs, openShells, openTasks, task, openFortune, openPlay, startPlay, PLAYS, showDream, openLifeAsk, pickAsk, dramaMorning, stallsMorning, openStall, buyStall, openWeddingPlan, startWedding, openRace, runRace, petExtraTick, divorce, composeSong, get pets(){ return pets; }, morning, addPet, newPetData, select, gotCatch, rollCatch, openBook, closeModal, openApartment, openMailbox, lettersMorning, openShareResident, openImportResident, residentCode, openHouseStyle, buildHouse, openPhotoMode, closePhotoMode, snapPhoto, memoryLine, remember, musicTheme, get pm(){ return pm; }, checkUpdate, openSaveIO, loadSaveText, openBook, openFamilyTree, openKitchen, openSchool, startTrip, tripMorning, birthdayAge, giveDream, checkDream, milestone, updateSeen, schoolMorning, openApartment, openRelChart, openTreasures, gainTreasure, openMiniGame, openSleepFix, doActivity, partyHourly, partyMorning, openDesigns, openDesignEditor, autoPhoto, applySeason, holidayMorning, jobMorning, openMe, maybeInvite, convoFor, portrait, buildHolidayDecor, applyHolidayHats, restockShop, renderer, scene, frame, get birth(){ return birth; }, haveBaby, get isleR(){ return isleR; }, get isleRTarget(){ return isleRTarget; }, get pets(){ return pets; }, newPetData, addPet, get paused(){ return paused; }, checkExpand, applyIsleLevel, canRomance, parentsLine, music(){ return {mStep, musicOn, soundOn, ctx: actx && actx.state}; }, voices(){ return zhVoices.map(v=>v.name+" | "+v.lang); }, pickVoice, speechText, natPitch, startParty, startConcert, openConcert, openAsk, openVisitor, spawnVisitor, makeVisitor, applyLv, openPark, openCafe, openLoc, songSeq, openShop, openRPS, takePhoto, openEditor, openPets, openPetEditor, openPetSheet, get pets(){ return pets; }, step(secs){ for(let i=0;i<secs*30;i++){ simT += 1/30; frame(1/30, simT); } }, select, startEvent, morning, enterRoom, openNews, showDream, byId};
 setTimeout(()=>toast('点一点小猫，看看它们想要什么吧！'), 600);
 setTimeout(()=>toast('点猫屋可以进窝里布置哦'), 3800);
 setTimeout(()=>toast('猫咪们会交朋友、哈气吵架、谈恋爱……多留意它们的心愿 💘'), 7000);
