@@ -39,7 +39,6 @@ button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
 .tbtn{font-size:14px;white-space:nowrap;min-width:38px;padding:2px 8px 3px;border:2px solid var(--ink);border-radius:10px;background:#fff;box-shadow:0 2px 0 var(--ink)}
 .tbtn.on{background:var(--sun)}
 #pauseBar{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:25;background:var(--panel);border:3px solid var(--ink);border-radius:22px;box-shadow:0 6px 0 var(--ink);padding:16px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;font-size:15px;text-align:center;width:min(360px,calc(100% - 32px));box-sizing:border-box}
-#pauseBar .credit{font-size:11px;opacity:.6;text-align:center}#pauseBar .credit a{color:inherit}
 #pauseBar b{font-family:var(--display);font-weight:400;font-size:26px}
 #restartAsk{display:flex;flex-direction:column;gap:10px;align-items:center;color:var(--ink-soft)}
 #restartAsk[hidden]{display:none}
@@ -319,7 +318,7 @@ textarea.text-in{width:100%;box-sizing:border-box;min-height:100px;resize:vertic
 <div id="moonSky" aria-hidden="true"></div>
 <div id="toasts"></div>
 <div id="inviteCard" hidden></div>
-<div id="pauseBar" hidden><b>⏸ 已暂停</b><div class="row-btns"><button class="toy pill-btn hot" id="resumeBtn">▶ 继续</button><button class="toy pill-btn" id="restartBtn">🔄 重新开始</button></div><div id="restartAsk" hidden><span>真的要重新开始吗？小岛会回到第一天，所有猫咪都会不见。</span><div class="row-btns"><button class="toy pill-btn" id="restartYes" style="background:var(--coral);color:#fff">确定重来</button><button class="toy pill-btn" id="restartNo">再想想</button></div></div><small class="credit">猫模型基于 <a href="https://sketchfab.com/3d-models/toon-cat-free-b2bd1ee7858444bda366110a2d960386" target="_blank" rel="noopener">Toon Cat FREE</a>，作者 Omabuarts Studio，<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY-4.0</a></small></div>
+<div id="pauseBar" hidden><b>⏸ 已暂停</b><div class="row-btns"><button class="toy pill-btn hot" id="resumeBtn">▶ 继续</button><button class="toy pill-btn" id="restartBtn">🔄 重新开始</button></div><div id="restartAsk" hidden><span>真的要重新开始吗？小岛会回到第一天，所有猫咪都会不见。</span><div class="row-btns"><button class="toy pill-btn" id="restartYes" style="background:var(--coral);color:#fff">确定重来</button><button class="toy pill-btn" id="restartNo">再想想</button></div></div></div>
 <div id="karaoke" hidden></div>
 
 <div id="dock">
@@ -740,14 +739,13 @@ function makeGradient(){
 const GRAD = makeGradient();
 
 /* ================= cats =================
-   Cats for 猫猫小岛, built on "Toon Cat FREE" by Omabuarts Studio (CC-BY-4.0,
-   https://sketchfab.com/3d-models/toon-cat-free-b2bd1ee7858444bda366110a2d960386).
+   Cats for 猫猫小岛, on our own chibi cat mesh (cat_model.js, made by tools/cat_model_gen.py).
    One rigged mesh is shared by every breed. Each breed reshapes it (bone lengths for legs, body,
    head, ears and tail; vertex shaping for girth, cheeks, muzzle and fur) and repaints it with a
    coat shader (tabby, calico, tuxedo, colourpoint, white spots). Poses are built on the rig:
    spine / neck / head / tail angles in cat space plus planar IK for the legs, then the cat is
-   set down on the ground by its lowest vertex. The model's own walk cycle is used for walking.
-   Needs T (THREE r128), GRAD (toon gradient), THREE.GLTFLoader, THREE.SkeletonUtils, TOON_CAT_GLTF.
+   set down on the ground by its lowest vertex. Walking is a procedural trot on the same IK.
+   Needs T (THREE r128), GRAD (toon gradient), THREE.GLTFLoader, THREE.SkeletonUtils, CAT_GLTF (cat_model.js).
    A cat faces +z and stands on y = 0. */
 
 const CAT_BREEDS = {
@@ -793,7 +791,7 @@ const CAT_MOUTH = {y:2.52, w:.2, h:.27}, CAT_NOSE = {y:2.6, w:.09, h:.07};
 // so the buffer is packed into a GLB here and the texture goes through a plain <img>.
 function catB64(uri){ const s = atob(uri.slice(uri.indexOf(',')+1)), u = new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i] = s.charCodeAt(i); return u; }
 function catGLB(){
-  const J = JSON.parse(JSON.stringify(TOON_CAT_GLTF)), bin = catB64(J.buffers[0].uri);
+  const J = JSON.parse(JSON.stringify(CAT_GLTF)), bin = catB64(J.buffers[0].uri);
   delete J.buffers[0].uri; J.buffers[0].byteLength = bin.length;
   const img = J.images[0].uri; delete J.images; delete J.textures; delete J.samplers;
   J.materials.forEach(m=>{ if(m.pbrMetallicRoughness) delete m.pbrMetallicRoughness.baseColorTexture; });
@@ -850,7 +848,7 @@ function loadToonCat(){
       return {p:new T.Vector3(x, y, ws ? zs/ws : 2.02), n:nn.normalize().lerp(new T.Vector3(0, .05, 1), .45).normalize()}; };
     const eyes = [1, -1].map(sd=>surfAt(CAT_EYE.x*sd, CAT_EYE.y, CAT_EYE.r*.8));
     const mouth = surfAt(0, CAT_MOUTH.y, .14), nose = surfAt(0, CAT_NOSE.y, .14);
-    catTemplate = {scene, walk:g.animations[0], map, probe, probeBody:probe.filter(i=>part[i]!==CAT_PART.leg), belly, eyes, mouth, nose};
+    catTemplate = {scene, map, probe, probeBody:probe.filter(i=>part[i]!==CAT_PART.leg), belly, eyes, mouth, nose};
     res(catTemplate);
   }, e=>{ console.log('gltf error', e); rej(e); })));
 }
@@ -927,7 +925,7 @@ vec3 catCoatPart(float part){
     float n = n3(p * 1.15 + vec3(3.1, .7, 5.3)) + .5 * n3(p * 2.6);
     float m = n3(p * 1.05 + vec3(9.2, 4.1, 1.7));
     if(!leg || h < .45){ if(n > .78) c = uPatC; else if(m > .62) c = uPatC2; }
-    if(head && p.y > 2.75){ c = p.x > .05 ? uPatC : p.x < -.05 ? uPatC2 : c; }
+    if(head) c = mix(c, mix(uPatC2, uPatC, cs(-.04, .04, p.x)), cs(2.6, 2.85, p.y));
     if(ear) c = p.x > 0. ? uPatC : uPatC2;
     if(tail) c = h < .55 ? uPatC2 : uPatC;
   } else if(uPat < 2.5){ // colourpoint: mask, ears, legs and tail darken
@@ -1199,7 +1197,6 @@ function buildCat(L, opts={}){
   const reach = k=>{ const lg = c.legs[k]; let len = 0, prev = catLocal(c, lg.chain[0], new T.Vector3()); [...lg.chain.slice(1), lg.end].forEach(b=>{ const p = catLocal(c, b, new T.Vector3()); len += p.distanceTo(prev); prev = p; }); return len; };
   c.reach = {F:reach('FL'), B:reach('BL')};
   catAddEyes(c, L); catAddMouth(c, L);
-  c.mixer = new T.AnimationMixer(inner); c.walkAct = c.mixer.clipAction(tpl.walk);
   c.probe = tpl.probe; c.ground = null;
   catStandRef(c);
   return c;
@@ -1318,9 +1315,7 @@ function applyCatPose(c, p, dt){
   const B = c.B, R = c.ref, reach = c.reach.F;
   c.lift.rotation.set(0, p.yaw || 0, p.roll || 0, 'YXZ'); c.lift.position.x = (p.x||0); c.lift.position.z = (p.z||0);
   c.root.updateMatrixWorld(true);
-  if(p.walk){ // the model's own walk cycle drives the bones
-    c.walkAct.play(); c.walkAct.timeScale = .9*(c.walkRate || 1); c.mixer.update(dt); c.inner.updateMatrixWorld(true);
-  } else { c.walkAct.stop(); catResetBones(c); }
+  catResetBones(c);
   c.lift.getWorldQuaternion(c.qRoot);
   rotPYR(c, B.torso, ...p.body);
   rotPYR(c, B.spine01, ...p.sp1); rotPYR(c, B.spine02, ...p.sp2);
@@ -1341,7 +1336,13 @@ function applyCatPose(c, p, dt){
   if(c.eyes) c.eyes.forEach(e=>{ const shut = bl > .7, o = 1 + Math.max(0,-bl)*.15, k = shut ? 1 : 1 - Math.max(0,bl)*.9/.7*.7;
     e.material = shut ? CAT_EYE_SHUT : e.userData.open; e.scale.set(o, o*k, o); e.position.y = shut ? 0 : -Math.max(0,bl)*.07; });
   // legs: IK in body space. Sitting / lying lowers the floor to the hips and tucks feet in.
-  if(!p.walk){
+  // walking: a trot, diagonal pairs in step (FL with BR, FR with BL)
+  if(p.walk){ c.walkT = (c.walkT || 0) + dt*7.5*(c.walkRate || 1);
+    const ph = {FL:0, BR:0, FR:Math.PI, BL:Math.PI};
+    for(const k in ph){ const f = c.walkT + ph[k]; p.legs[k] = [0, Math.max(0, Math.cos(f))*.13, Math.sin(f)*.2]; p.footP[k] = -Math.max(0, Math.cos(f))*.5; }
+    p.lift = (p.lift||0) + Math.abs(Math.sin(c.walkT))*.025;
+  }
+  {
     const hipD = p.hipDrop||0, frD = p.frontDrop||0, bum = reach*.42;
     const floor = R.floor + hipD*Math.max(0, R.hp.y - R.floor - bum);
     for(const k in c.legs){

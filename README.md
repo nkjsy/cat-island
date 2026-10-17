@@ -20,8 +20,4 @@
 
 ## 技术
 
-单个 `index.html`，three.js r128 + GLTFLoader。猫叫是 10 只真猫的录音，背景音乐白天和晚上各一首，都是 CC0（来源见 `audio/CREDITS.md`）。PWA，可以加到手机主屏幕。
-
-## 致谢
-
-猫模型基于 [Toon Cat FREE](https://sketchfab.com/3d-models/toon-cat-free-b2bd1ee7858444bda366110a2d960386)，作者 Omabuarts Studio，[CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)（见 `CAT_MODEL_LICENSE.txt`）。
+单个 `index.html`，three.js r128 + GLTFLoader。猫模型是我们自己的 Q 版橘猫，由 `tools/cat_model_gen.py` 生成到 `cat_model.js`。猫叫是 10 只真猫的录音，背景音乐白天和晚上各一首，都是 CC0（来源见 `audio/CREDITS.md`）。PWA，可以加到手机主屏幕。
